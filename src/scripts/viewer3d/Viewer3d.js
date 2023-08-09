@@ -18,6 +18,12 @@ import {ConfigurationHelper} from '../helpers/ConfigurationHelper';
 import { CSS2DRenderer } from 'three/examples/jsm/renderers/CSS2DRenderer.js';
 import { Vector3 } from 'three';
 
+// mbn 
+import * as THREE from 'three'; 
+import { OBJLoader } from "../OBJLoader.js";
+// mbn 
+
+
 export const states = { UNSELECTED: 0, SELECTED: 1, DRAGGING: 2, ROTATING: 3, ROTATING_FREE: 4, PANNING: 5 };
 
 export class Viewer3D extends Scene {
@@ -239,6 +245,11 @@ export class Viewer3D extends Scene {
             this.remove(this.__physicalRoomItems[i]);
         }
         this.__physicalRoomItems.length = 0; //A cool way to clear an array in javascript
+        // Problem 
+        const geometry = new THREE.BoxGeometry(200, 200, 200);
+        const material = new THREE.MeshBasicMaterial( { color: 0xffff00 } );
+        const mesh = new THREE.Mesh( geometry, material );
+        this.add( mesh );
         let roomItems = this.model.roomItems;
         for (i = 0; i < roomItems.length; i++) {
             let physicalRoomItem = new Physical3DItem(roomItems[i], this.dragcontrols, this.__options);
