@@ -20,7 +20,7 @@ import { Vector3 } from 'three';
 
 // mbn 
 import * as THREE from 'three'; 
-import { OBJLoader } from "../OBJLoader.js";
+import {OBJLoader} from "../OBJLoader.js";
 // mbn 
 
 
@@ -250,6 +250,28 @@ export class Viewer3D extends Scene {
         const material = new THREE.MeshBasicMaterial( { color: 0xffff00 } );
         const mesh = new THREE.Mesh( geometry, material );
         this.add( mesh );
+        const loader = new OBJLoader();
+
+        // load a resource
+        loader.load(
+            'models/cube.obj',
+            // called when resource is loaded
+            function( object ) {
+                for (const key in object) {
+                    document.write(`<p><strong>${key}:</strong> ${object[key]}</p>`);
+                }
+                this.add( object );
+            },
+            
+            // // called when loading is in progresses
+            // function ( xhr ) {
+            //     console.log( ( xhr.loaded / xhr.total * 100 ) + '% loaded' );
+            // },
+            // // called when loading has errors
+            // function ( error ) {
+            //     console.log( 'An error happened' );
+            // }
+        );
         let roomItems = this.model.roomItems;
         for (i = 0; i < roomItems.length; i++) {
             let physicalRoomItem = new Physical3DItem(roomItems[i], this.dragcontrols, this.__options);
