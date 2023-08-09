@@ -249,19 +249,35 @@ export class Viewer3D extends Scene {
         const geometry = new THREE.BoxGeometry(200, 200, 200);
         const material = new THREE.MeshBasicMaterial( { color: 0xffff00 } );
         const mesh = new THREE.Mesh( geometry, material );
-        this.add( mesh );
+        // this.add( mesh );
         const loader = new OBJLoader();
 
         // load a resource
-        loader.load(
-            'models/cube.obj',
-            // called when resource is loaded
-            function( object ) {
-                for (const key in object) {
-                    document.write(`<p><strong>${key}:</strong> ${object[key]}</p>`);
-                }
-                this.add( object );
+
+        fetch("/chair_phone/mlp.json")
+            .then((response) => {
+            return response.json();
+        })
+        const objLoader = new OBJLoader();
+        objLoader.load(
+        '/chair_phone/cube.obj/',
+        obj => {
+            // This function is called when the OBJ is loaded.
+            // You can add the loaded object to the scene here.
+            obj.scale(200, 200, 200); 
+            this.add(obj);
+            // for (const key in obj) {
+            //     document.write(`<p><strong>${key}:</strong> ${obj[key]}</p>`);
+            // }
+        },
+        xhr => {
+            // This function is called while loading the OBJ and can be used for progress tracking.
+            console.log((xhr.loaded / xhr.total) * 100 + '% loaded');
             },
+        error => {
+            console.error('Error loading OBJ:', error);
+            }
+        );
             
             // // called when loading is in progresses
             // function ( xhr ) {
@@ -271,7 +287,6 @@ export class Viewer3D extends Scene {
             // function ( error ) {
             //     console.log( 'An error happened' );
             // }
-        );
         let roomItems = this.model.roomItems;
         for (i = 0; i < roomItems.length; i++) {
             let physicalRoomItem = new Physical3DItem(roomItems[i], this.dragcontrols, this.__options);
