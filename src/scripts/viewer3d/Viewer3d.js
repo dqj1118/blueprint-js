@@ -260,14 +260,14 @@ export class Viewer3D extends Scene {
         })
         const objLoader = new OBJLoader();
         objLoader.load(
-        '/chair_phone/cube.obj/',
+        '/chair_phone/shape0.obj/',
         obj => {
             // This function is called when the OBJ is loaded.
             // You can add the loaded object to the scene here.
-            obj.scale(200, 200, 200); 
+            obj.scale.set( 200, 200, 200 ); 
             this.add(obj);
-            // for (const key in obj) {
-            //     document.write(`<p><strong>${key}:</strong> ${obj[key]}</p>`);
+            // for (const key in obj.children[0]) {
+            //     document.write(`<p><strong>${key}:</strong> ${obj.children[0][key]}</p>`);
             // }
         },
         xhr => {
