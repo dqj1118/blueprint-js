@@ -245,12 +245,237 @@ export class Viewer3D extends Scene {
             this.remove(this.__physicalRoomItems[i]);
         }
         this.__physicalRoomItems.length = 0; //A cool way to clear an array in javascript
+        // mbn
+
+        const viewDependenceNetworkShaderFunctions = `
+            precision mediump float;
+
+            layout(location = 0) out vec4 pc_FragColor;
+
+            in vec2 vUv;
+
+            uniform mediump sampler2D tDiffuse0x;
+            uniform mediump sampler2D tDiffuse1x;
+            uniform mediump sampler2D tDiffuse2x;
+
+            uniform mediump sampler2D weightsZero;
+            uniform mediump sampler2D weightsOne;
+            uniform mediump sampler2D weightsTwo;
+
+            mediump vec3 evaluateNetwork( mediump vec4 f0, mediump vec4 f1, mediump vec4 viewdir) {
+                mediump float intermediate_one[NUM_CHANNELS_ONE] = float[](
+                    BIAS_LIST_ZERO
+                );
+                for (int j = 0; j < NUM_CHANNELS_ZERO; ++j) {
+                    mediump float input_value = 0.0;
+                    if (j < 4) {
+                    input_value =
+                        (j == 0) ? f0.r : (
+                        (j == 1) ? f0.g : (
+                        (j == 2) ? f0.b : f0.a));
+                    } else if (j < 8) {
+                    input_value =
+                        (j == 4) ? f1.r : (
+                        (j == 5) ? f1.g : (
+                        (j == 6) ? f1.b : f1.a));
+                    } else {
+                    input_value =
+                        (j == 8) ? viewdir.r : (
+                        (j == 9) ? -viewdir.b : viewdir.g); //switch y-z axes
+                    }
+                    for (int i = 0; i < NUM_CHANNELS_ONE; ++i) {
+                    intermediate_one[i] += input_value *
+                        texelFetch(weightsZero, ivec2(j, i), 0).x;
+                    }
+                }
+                mediump float intermediate_two[NUM_CHANNELS_TWO] = float[](
+                    BIAS_LIST_ONE
+                );
+                for (int j = 0; j < NUM_CHANNELS_ONE; ++j) {
+                    if (intermediate_one[j] <= 0.0) {
+                        continue;
+                    }
+                    for (int i = 0; i < NUM_CHANNELS_TWO; ++i) {
+                        intermediate_two[i] += intermediate_one[j] *
+                            texelFetch(weightsOne, ivec2(j, i), 0).x;
+                    }
+                }
+                mediump float result[NUM_CHANNELS_THREE] = float[](
+                    BIAS_LIST_TWO
+                );
+                for (int j = 0; j < NUM_CHANNELS_TWO; ++j) {
+                    if (intermediate_two[j] <= 0.0) {
+                        continue;
+                    }
+                    for (int i = 0; i < NUM_CHANNELS_THREE; ++i) {
+                        result[i] += intermediate_two[j] *
+                            texelFetch(weightsTwo, ivec2(j, i), 0).x;
+                    }
+                }
+                for (int i = 0; i < NUM_CHANNELS_THREE; ++i) {
+                    result[i] = 1.0 / (1.0 + exp(-result[i]));
+                }
+                return vec3(result[0]*viewdir.a+(1.0-viewdir.a),
+                            result[1]*viewdir.a+(1.0-viewdir.a),
+                            result[2]*viewdir.a+(1.0-viewdir.a));
+                }
+
+
+            void main() {
+
+                vec4 diffuse0 = texture( tDiffuse0x, vUv );
+                if (diffuse0.a < 0.6) discard;
+                vec4 diffuse1 = texture( tDiffuse1x, vUv );
+                vec4 diffuse2 = texture( tDiffuse2x, vUv );
+
+                //deal with iphone
+                diffuse0.a = diffuse0.a*2.0-1.0;
+                diffuse1.a = diffuse1.a*2.0-1.0;
+                diffuse2.a = diffuse2.a*2.0-1.0;
+
+                //pc_FragColor.rgb  = diffuse1.rgb;
+                pc_FragColor.rgb = evaluateNetwork(diffuse1,diffuse2,diffuse0);
+                pc_FragColor.a = 1.0;
+            }
+        `;
+        
+        /**
+                 * Creates a data texture containing MLP weights.
+                 *
+                 * @param {!Object} network_weights
+                 * @return {!THREE.DataTexture}
+                 */
+        function createNetworkWeightTexture(network_weights) {
+            let width = network_weights.length;
+            let height = network_weights[0].length;
+
+            let weightsData = new Float32Array(width * height);
+            for (let co = 0; co < height; co++) {
+                for (let ci = 0; ci < width; ci++) {
+                    let index = co * width + ci;
+                    let weight = network_weights[ci][co];
+                    weightsData[index] = weight;
+                }
+            }
+            let texture = new THREE.DataTexture(
+            weightsData,
+            width,
+            height,
+            THREE.RedFormat,
+            THREE.FloatType
+            );
+            texture.magFilter = THREE.NearestFilter;
+            texture.minFilter = THREE.NearestFilter;
+            texture.needsUpdate = true;
+            return texture;
+        }
+
+        /**
+         * Creates shader code for the view-dependence MLP.
+         *
+         * This populates the shader code in viewDependenceNetworkShaderFunctions with
+         * network weights and sizes as compile-time constants. The result is returned
+         * as a string.
+         *
+         * @param {!Object} scene_params
+         * @return {string}
+         */
+        function createViewDependenceFunctions(network_weights) {
+            let width = network_weights["0_bias"].length;
+            let biasListZero = "";
+            for (let i = 0; i < width; i++) {
+                let bias = network_weights["0_bias"][i];
+                biasListZero += Number(bias).toFixed(7);
+                if (i + 1 < width) {
+                    biasListZero += ", ";
+                }
+            }
+
+            width = network_weights["1_bias"].length;
+            let biasListOne = "";
+            for (let i = 0; i < width; i++) {
+                let bias = network_weights["1_bias"][i];
+                biasListOne += Number(bias).toFixed(7);
+                if (i + 1 < width) {
+                    biasListOne += ", ";
+                }
+            }
+
+            width = network_weights["2_bias"].length;
+            let biasListTwo = "";
+            for (let i = 0; i < width; i++) {
+                let bias = network_weights["2_bias"][i];
+                biasListTwo += Number(bias).toFixed(7);
+                if (i + 1 < width) {
+                    biasListTwo += ", ";
+                }
+            }
+
+            let channelsZero = network_weights["0_weights"].length;
+            let channelsOne = network_weights["0_bias"].length;
+            let channelsTwo = network_weights["1_bias"].length;
+            let channelsThree = network_weights["2_bias"].length;
+
+            let fragmentShaderSource = viewDependenceNetworkShaderFunctions.replace(
+            new RegExp("NUM_CHANNELS_ZERO", "g"),
+            channelsZero
+            );
+            fragmentShaderSource = fragmentShaderSource.replace(
+            new RegExp("NUM_CHANNELS_ONE", "g"),
+            channelsOne
+            );
+            fragmentShaderSource = fragmentShaderSource.replace(
+            new RegExp("NUM_CHANNELS_TWO", "g"),
+            channelsTwo
+            );
+            fragmentShaderSource = fragmentShaderSource.replace(
+            new RegExp("NUM_CHANNELS_THREE", "g"),
+            channelsThree
+            );
+
+            fragmentShaderSource = fragmentShaderSource.replace(
+            new RegExp("BIAS_LIST_ZERO", "g"),
+            biasListZero
+            );
+            fragmentShaderSource = fragmentShaderSource.replace(
+            new RegExp("BIAS_LIST_ONE", "g"),
+            biasListOne
+            );
+            fragmentShaderSource = fragmentShaderSource.replace(
+            new RegExp("BIAS_LIST_TWO", "g"),
+            biasListTwo
+            );
+
+            return fragmentShaderSource;
+        }
+
+        // container = document.getElementById("container");
+        const preset_size_w = 800;
+        const preset_size_h = 800;
+        // container.appendChild(renderer.domElement);
+
         // Problem 
-        const geometry = new THREE.BoxGeometry(200, 200, 200);
-        const material = new THREE.MeshBasicMaterial( { color: 0xffff00 } );
-        const mesh = new THREE.Mesh( geometry, material );
-        // this.add( mesh );
-        const loader = new OBJLoader();
+        // Create a multi render target with Float buffers
+        // renderTarget = new THREE.WebGLMultipleRenderTargets(
+        //     preset_size_w * 2,
+        //     preset_size_h * 2,
+        //     3
+        // );
+
+        this.renderTarget = new THREE.WebGLMultipleRenderTargets(
+            preset_size_w * 2,
+            preset_size_h * 2,
+            3
+        );
+
+        for (let i = 0, il = this.renderTarget.texture.length; i < il; i++) {
+            // const paragraph = document.createElement('p');
+            // paragraph.innerHTML = `<strong>${i}:</strong>}`;
+            // outputElement.appendChild(paragraph);
+            this.renderTarget.texture[i].minFilter = THREE.LinearFilter;
+            this.renderTarget.texture[i].magFilter = THREE.LinearFilter;
+            this.renderTarget.texture[i].type = THREE.FloatType;
+        }
 
         // load a resource
 
@@ -279,14 +504,8 @@ export class Viewer3D extends Scene {
             }
         );
             
-            // // called when loading is in progresses
-            // function ( xhr ) {
-            //     console.log( ( xhr.loaded / xhr.total * 100 ) + '% loaded' );
-            // },
-            // // called when loading has errors
-            // function ( error ) {
-            //     console.log( 'An error happened' );
-            // }
+        // mbn 
+
         let roomItems = this.model.roomItems;
         for (i = 0; i < roomItems.length; i++) {
             let physicalRoomItem = new Physical3DItem(roomItems[i], this.dragcontrols, this.__options);
