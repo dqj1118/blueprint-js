@@ -482,30 +482,59 @@ export class Viewer3D extends Scene {
         fetch("/chair_phone/mlp.json")
             .then((response) => {
             return response.json();
-        })
-        const objLoader = new OBJLoader();
-        objLoader.load(
-        '/chair_phone/shape0.obj/',
-        obj => {
-            // This function is called when the OBJ is loaded.
-            // You can add the loaded object to the scene here.
-            obj.scale.set( 200, 200, 200 ); 
-            this.add(obj);
-            // for (const key in obj.children[0]) {
-            //     document.write(`<p><strong>${key}:</strong> ${obj.children[0][key]}</p>`);
-            // }
-        },
-        xhr => {
-            // This function is called while loading the OBJ and can be used for progress tracking.
-            console.log((xhr.loaded / xhr.total) * 100 + '% loaded');
-            },
-        error => {
-            console.error('Error loading OBJ:', error);
-            }
-        );
+            })
+            .then((json) => {
+                for (let i = 0, il = json["obj_num"]; i < il; i++) {
+                  let tex0 = new THREE.TextureLoader().load(
+                    "chair_phone/shape" + i.toFixed(0) + ".png" + "feat0.png",
+                    // function () {
+                    //   render();
+                    // }
+                  );
+                  tex0.magFilter = THREE.NearestFilter;
+                  tex0.minFilter = THREE.NearestFilter;
+                  let tex1 = new THREE.TextureLoader().load(
+                      "chair_phone/shape" + i.toFixed(0) + ".png" + "feat1.png",
+                    //   function () {
+                    //       render();
+                    //   }
+                  );
+                  tex1.magFilter = THREE.NearestFilter;
+                  tex1.minFilter = THREE.NearestFilter;
+                  let newmat = new THREE.RawShaderMaterial({
+                    side: THREE.DoubleSide,
+                    // Problem 
+                    // vertexShader: document
+                    //   .querySelector("#gbuffer-vert")
+                    //   .textContent.trim(),
+                    // fragmentShader: document
+                    //   .querySelector("#gbuffer-frag")
+                    //   .textContent.trim(),
+                    uniforms: {
+                      tDiffuse0: { value: tex0 },
+                      tDiffuse1: { value: tex1 },
+                    },
+                    glslVersion: THREE.GLSL3,
+                });
+                
+                new OBJLoader().load(
+                    "chair_phone/shape" + i.toFixed(0) + ".obj",
+                    object => {
+                        // Problem 
+                    //   object.traverse(function (child) {
+                    //     if (child.type == "Mesh") {
+                    //       child.material = newmat;
+                    //     }
+                    //   });
+                      object.scale.set(50, 50, 50); 
+                      // let mbnRoomItem = new Physical3DItem(object, this.dragcontrols, this.__options);
+                      this.add(object);
+                    });
+                }
+            });
             
         // mbn 
-
+        
         let roomItems = this.model.roomItems;
         for (i = 0; i < roomItems.length; i++) {
             let physicalRoomItem = new Physical3DItem(roomItems[i], this.dragcontrols, this.__options);
