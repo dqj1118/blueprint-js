@@ -479,7 +479,7 @@ export class Viewer3D extends Scene {
 
         // load a resource
 
-        fetch("/chair_phone/mlp.json")
+        fetch("chair_phone/mlp.json")
             .then((response) => {
             return response.json();
             })
