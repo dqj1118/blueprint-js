@@ -503,13 +503,12 @@ export class Viewer3D extends Scene {
                   tex1.minFilter = THREE.NearestFilter;
                   let newmat = new THREE.RawShaderMaterial({
                     side: THREE.DoubleSide,
-                    // Problem 
-                    // vertexShader: document
-                    //   .querySelector("#gbuffer-vert")
-                    //   .textContent.trim(),
-                    // fragmentShader: document
-                    //   .querySelector("#gbuffer-frag")
-                    //   .textContent.trim(),
+                    vertexShader: document
+                      .querySelector("#gbuffer-vert")
+                      .textContent.trim(),
+                    fragmentShader: document
+                      .querySelector("#gbuffer-frag")
+                      .textContent.trim(),
                     uniforms: {
                       tDiffuse0: { value: tex0 },
                       tDiffuse1: { value: tex1 },
@@ -527,6 +526,9 @@ export class Viewer3D extends Scene {
                     //     }
                     //   });
                       object.scale.set(50, 50, 50); 
+                      object.position.x = 100;
+                      object.position.y = 50;
+                      object.position.z = 150;
                       // let mbnRoomItem = new Physical3DItem(object, this.dragcontrols, this.__options);
                       this.add(object);
                     });
