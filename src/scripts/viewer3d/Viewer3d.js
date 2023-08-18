@@ -520,17 +520,17 @@ export class Viewer3D extends Scene {
                     "chair_phone/shape" + i.toFixed(0) + ".obj",
                     object => {
                         // Problem 
-                    //   object.traverse(function (child) {
-                    //     if (child.type == "Mesh") {
-                    //       child.material = newmat;
-                    //     }
-                    //   });
-                      object.scale.set(50, 50, 50); 
-                      object.position.x = 100;
-                      object.position.y = 50;
-                      object.position.z = 150;
-                      // let mbnRoomItem = new Physical3DItem(object, this.dragcontrols, this.__options);
-                      this.add(object);
+                        object.traverse(function (child) {
+                            if (child.type == "Mesh") {
+                            child.material = newmat;
+                            }
+                        });
+                        object.scale.set(50, 50, 50); 
+                        object.position.x = 100;
+                        object.position.y = 50;
+                        object.position.z = 150;
+                        // let mbnRoomItem = new Physical3DItem(object, this.dragcontrols, this.__options);
+                        this.add(object);
                     });
                 }
             });
