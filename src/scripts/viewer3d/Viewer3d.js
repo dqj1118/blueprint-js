@@ -456,11 +456,12 @@ export class Viewer3D extends Scene {
 
         // Problem 
         // Create a multi render target with Float buffers
-        // renderTarget = new THREE.WebGLMultipleRenderTargets(
-        //     preset_size_w * 2,
-        //     preset_size_h * 2,
-        //     3
-        // );
+        let renderTarget; 
+        renderTarget = new THREE.WebGLMultipleRenderTargets(
+            preset_size_w * 2,
+            preset_size_h * 2,
+            3
+        );
 
         this.renderTarget = new THREE.WebGLMultipleRenderTargets(
             preset_size_w * 2,
@@ -551,6 +552,7 @@ export class Viewer3D extends Scene {
                 // }
 
                         // PostProcessing setup
+                let postScene, postCamera; 
                 postScene = new THREE.Scene();
                 postScene.background = new THREE.Color("rgb(255, 255, 255)");
                 //postScene.background = new THREE.Color("rgb(128, 128, 128)");
