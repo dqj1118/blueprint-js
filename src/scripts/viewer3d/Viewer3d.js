@@ -533,6 +533,49 @@ export class Viewer3D extends Scene {
                         this.add(object);
                     });
                 }
+                let network_weights = json;
+                let fragmentShaderSource =
+                createViewDependenceFunctions(network_weights);
+                let weightsTexZero = createNetworkWeightTexture(
+                network_weights["0_weights"]
+                );
+                let weightsTexOne = createNetworkWeightTexture(
+                network_weights["1_weights"]
+                );
+                let weightsTexTwo = createNetworkWeightTexture(
+                network_weights["2_weights"]
+                );
+                
+                // for (const key in fragmentShaderSource) {
+                //     document.write(`<p><strong>${key}:</strong> ${fragmentShaderSource[key]}</p>`);
+                // }
+
+                        // PostProcessing setup
+                postScene = new THREE.Scene();
+                postScene.background = new THREE.Color("rgb(255, 255, 255)");
+                //postScene.background = new THREE.Color("rgb(128, 128, 128)");
+                postCamera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
+                postScene.add(
+                    new THREE.Mesh(
+                        new THREE.PlaneGeometry(2, 2),
+                        new THREE.RawShaderMaterial({
+                        vertexShader: document
+                            .querySelector("#render-vert")
+                            .textContent.trim(),
+                        fragmentShader: fragmentShaderSource,
+                        uniforms: {
+                            tDiffuse0x: { value: renderTarget.texture[0] },
+                            tDiffuse1x: { value: renderTarget.texture[1] },
+                            tDiffuse2x: { value: renderTarget.texture[2] },
+                            weightsZero: { value: weightsTexZero },
+                            weightsOne: { value: weightsTexOne },
+                            weightsTwo: { value: weightsTexTwo },
+                        },
+                        glslVersion: THREE.GLSL3,
+                        })
+                    )
+                );
+                
             });
             
         // mbn 
