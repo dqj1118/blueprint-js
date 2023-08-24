@@ -454,15 +454,6 @@ export class Viewer3D extends Scene {
         const preset_size_h = 800;
         // container.appendChild(renderer.domElement);
 
-        // Problem 
-        // Create a multi render target with Float buffers
-        let renderTarget; 
-        renderTarget = new THREE.WebGLMultipleRenderTargets(
-            preset_size_w * 2,
-            preset_size_h * 2,
-            3
-        );
-
         this.renderTarget = new THREE.WebGLMultipleRenderTargets(
             preset_size_w * 2,
             preset_size_h * 2,
@@ -566,9 +557,9 @@ export class Viewer3D extends Scene {
                             .textContent.trim(),
                         fragmentShader: fragmentShaderSource,
                         uniforms: {
-                            tDiffuse0x: { value: renderTarget.texture[0] },
-                            tDiffuse1x: { value: renderTarget.texture[1] },
-                            tDiffuse2x: { value: renderTarget.texture[2] },
+                            tDiffuse0x: { value: this.renderTarget.texture[0] },
+                            tDiffuse1x: { value: this.renderTarget.texture[1] },
+                            tDiffuse2x: { value: this.renderTarget.texture[2] },
                             weightsZero: { value: weightsTexZero },
                             weightsOne: { value: weightsTexOne },
                             weightsTwo: { value: weightsTexTwo },
