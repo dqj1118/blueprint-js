@@ -453,20 +453,32 @@ export class Viewer3D extends Scene {
         const preset_size_w = 800;
         const preset_size_h = 800;
         // container.appendChild(renderer.domElement);
+        let renderer, renderTarget; 
+        renderer = new THREE.WebGLRenderer({
+            powerPreference: "high-performance",
+            precision: "highp",
+        });
+        renderer.setPixelRatio(1);
+        renderer.setSize(preset_size_w, preset_size_h);
+        renderer.setClearColor(new THREE.Color("rgb(0, 0, 0)"), 0.5);
 
-        this.renderTarget = new THREE.WebGLMultipleRenderTargets(
+        renderTarget = new THREE.WebGLMultipleRenderTargets(
             preset_size_w * 2,
             preset_size_h * 2,
             3
         );
 
-        for (let i = 0, il = this.renderTarget.texture.length; i < il; i++) {
+        for (let i = 0, il = renderTarget.texture.length; i < il; i++) {
             // const paragraph = document.createElement('p');
             // paragraph.innerHTML = `<strong>${i}:</strong>}`;
             // outputElement.appendChild(paragraph);
-            this.renderTarget.texture[i].minFilter = THREE.LinearFilter;
-            this.renderTarget.texture[i].magFilter = THREE.LinearFilter;
-            this.renderTarget.texture[i].type = THREE.FloatType;
+            renderTarget.texture[i].minFilter = THREE.LinearFilter;
+            renderTarget.texture[i].magFilter = THREE.LinearFilter;
+            renderTarget.texture[i].type = THREE.FloatType;
+        }
+
+        for (const key in this.camera) {
+            console.log(`<p><strong>${key}:</strong> ${this.camera[key]}</p>`);
         }
 
         // load a resource
@@ -479,17 +491,17 @@ export class Viewer3D extends Scene {
                 for (let i = 0, il = json["obj_num"]; i < il; i++) {
                   let tex0 = new THREE.TextureLoader().load(
                     "chair_phone/shape" + i.toFixed(0) + ".png" + "feat0.png",
-                    // function () {
-                    //   render();
-                    // }
+                    () => {
+                        this.mbn_render();
+                    }
                   );
                   tex0.magFilter = THREE.NearestFilter;
                   tex0.minFilter = THREE.NearestFilter;
                   let tex1 = new THREE.TextureLoader().load(
                       "chair_phone/shape" + i.toFixed(0) + ".png" + "feat1.png",
-                    //   function () {
-                    //       render();
-                    //   }
+                    () => {
+                        this.mbn_render();
+                    }
                   );
                   tex1.magFilter = THREE.NearestFilter;
                   tex1.minFilter = THREE.NearestFilter;
@@ -542,7 +554,7 @@ export class Viewer3D extends Scene {
                 //     document.write(`<p><strong>${key}:</strong> ${fragmentShaderSource[key]}</p>`);
                 // }
 
-                        // PostProcessing setup
+                // PostProcessing setup
                 let postScene, postCamera; 
                 postScene = new THREE.Scene();
                 postScene.background = new THREE.Color("rgb(255, 255, 255)");
@@ -557,9 +569,9 @@ export class Viewer3D extends Scene {
                             .textContent.trim(),
                         fragmentShader: fragmentShaderSource,
                         uniforms: {
-                            tDiffuse0x: { value: this.renderTarget.texture[0] },
-                            tDiffuse1x: { value: this.renderTarget.texture[1] },
-                            tDiffuse2x: { value: this.renderTarget.texture[2] },
+                            tDiffuse0x: { value: renderTarget.texture[0] },
+                            tDiffuse1x: { value: renderTarget.texture[1] },
+                            tDiffuse2x: { value: renderTarget.texture[2] },
                             weightsZero: { value: weightsTexZero },
                             weightsOne: { value: weightsTexOne },
                             weightsTwo: { value: weightsTexTwo },
@@ -580,6 +592,15 @@ export class Viewer3D extends Scene {
             this.__physicalRoomItems.push(physicalRoomItem);
         }
     }
+
+    // mbn
+    mbn_render() {
+        // render scene into target
+        // Problem 
+        // this.renderer.setRenderTarget(this.renderTarget);
+        this.renderer.render(this, this.camera);
+    }
+    // mbn
 
     addRoomsAndWalls() {
         let scope = this;
