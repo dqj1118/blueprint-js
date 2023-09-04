@@ -477,9 +477,6 @@ export class Viewer3D extends Scene {
             renderTarget.texture[i].type = THREE.FloatType;
         }
 
-        for (const key in this.camera) {
-            console.log(`<p><strong>${key}:</strong> ${this.camera[key]}</p>`);
-        }
 
         // load a resource
 
@@ -492,7 +489,7 @@ export class Viewer3D extends Scene {
                   let tex0 = new THREE.TextureLoader().load(
                     "chair_phone/shape" + i.toFixed(0) + ".png" + "feat0.png",
                     () => {
-                        this.mbn_render();
+                        this.mbn_render(renderTarget);
                     }
                   );
                   tex0.magFilter = THREE.NearestFilter;
@@ -500,7 +497,7 @@ export class Viewer3D extends Scene {
                   let tex1 = new THREE.TextureLoader().load(
                       "chair_phone/shape" + i.toFixed(0) + ".png" + "feat1.png",
                     () => {
-                        this.mbn_render();
+                        this.mbn_render(renderTarget);
                     }
                   );
                   tex1.magFilter = THREE.NearestFilter;
@@ -594,10 +591,13 @@ export class Viewer3D extends Scene {
     }
 
     // mbn
-    mbn_render() {
+    mbn_render(renderTarget) {
         // render scene into target
         // Problem 
-        // this.renderer.setRenderTarget(this.renderTarget);
+        for (const key in renderTarget) {
+            console.log(`<p><strong>${key}:</strong> ${renderTarget[key]}</p>`);
+        }
+        // this.renderer.setRenderTarget(renderTarget);
         this.renderer.render(this, this.camera);
     }
     // mbn
