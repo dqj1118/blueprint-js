@@ -130,6 +130,344 @@ export class Viewer3D extends Scene {
             window.addEventListener('orientationchange', () => { scope.updateWindowSize(); });
         }
         
+        // mbn 
+        const viewDependenceNetworkShaderFunctions = `
+        precision mediump float;
+
+        layout(location = 0) out vec4 pc_FragColor;
+
+        in vec2 vUv;
+
+        uniform mediump sampler2D tDiffuse0x;
+        uniform mediump sampler2D tDiffuse1x;
+        uniform mediump sampler2D tDiffuse2x;
+
+        uniform mediump sampler2D weightsZero;
+        uniform mediump sampler2D weightsOne;
+        uniform mediump sampler2D weightsTwo;
+
+        mediump vec3 evaluateNetwork( mediump vec4 f0, mediump vec4 f1, mediump vec4 viewdir) {
+            mediump float intermediate_one[NUM_CHANNELS_ONE] = float[](
+                BIAS_LIST_ZERO
+            );
+            for (int j = 0; j < NUM_CHANNELS_ZERO; ++j) {
+                mediump float input_value = 0.0;
+                if (j < 4) {
+                input_value =
+                    (j == 0) ? f0.r : (
+                    (j == 1) ? f0.g : (
+                    (j == 2) ? f0.b : f0.a));
+                } else if (j < 8) {
+                input_value =
+                    (j == 4) ? f1.r : (
+                    (j == 5) ? f1.g : (
+                    (j == 6) ? f1.b : f1.a));
+                } else {
+                input_value =
+                    (j == 8) ? viewdir.r : (
+                    (j == 9) ? -viewdir.b : viewdir.g); //switch y-z axes
+                }
+                for (int i = 0; i < NUM_CHANNELS_ONE; ++i) {
+                intermediate_one[i] += input_value *
+                    texelFetch(weightsZero, ivec2(j, i), 0).x;
+                }
+            }
+            mediump float intermediate_two[NUM_CHANNELS_TWO] = float[](
+                BIAS_LIST_ONE
+            );
+            for (int j = 0; j < NUM_CHANNELS_ONE; ++j) {
+                if (intermediate_one[j] <= 0.0) {
+                    continue;
+                }
+                for (int i = 0; i < NUM_CHANNELS_TWO; ++i) {
+                    intermediate_two[i] += intermediate_one[j] *
+                        texelFetch(weightsOne, ivec2(j, i), 0).x;
+                }
+            }
+            mediump float result[NUM_CHANNELS_THREE] = float[](
+                BIAS_LIST_TWO
+            );
+            for (int j = 0; j < NUM_CHANNELS_TWO; ++j) {
+                if (intermediate_two[j] <= 0.0) {
+                    continue;
+                }
+                for (int i = 0; i < NUM_CHANNELS_THREE; ++i) {
+                    result[i] += intermediate_two[j] *
+                        texelFetch(weightsTwo, ivec2(j, i), 0).x;
+                }
+            }
+            for (int i = 0; i < NUM_CHANNELS_THREE; ++i) {
+                result[i] = 1.0 / (1.0 + exp(-result[i]));
+            }
+            return vec3(result[0]*viewdir.a+(1.0-viewdir.a),
+                        result[1]*viewdir.a+(1.0-viewdir.a),
+                        result[2]*viewdir.a+(1.0-viewdir.a));
+            }
+
+
+        void main() {
+
+            vec4 diffuse0 = texture( tDiffuse0x, vUv );
+            if (diffuse0.a < 0.6) discard;
+            vec4 diffuse1 = texture( tDiffuse1x, vUv );
+            vec4 diffuse2 = texture( tDiffuse2x, vUv );
+
+            //deal with iphone
+            diffuse0.a = diffuse0.a*2.0-1.0;
+            diffuse1.a = diffuse1.a*2.0-1.0;
+            diffuse2.a = diffuse2.a*2.0-1.0;
+
+            //pc_FragColor.rgb  = diffuse1.rgb;
+            pc_FragColor.rgb = evaluateNetwork(diffuse1,diffuse2,diffuse0);
+            pc_FragColor.a = 1.0;
+            }
+        `;
+    
+        /**
+             * Creates a data texture containing MLP weights.
+             *
+             * @param {!Object} network_weights
+             * @return {!THREE.DataTexture}
+             */
+        function createNetworkWeightTexture(network_weights) {
+            let width = network_weights.length;
+            let height = network_weights[0].length;
+
+            let weightsData = new Float32Array(width * height);
+            for (let co = 0; co < height; co++) {
+                for (let ci = 0; ci < width; ci++) {
+                    let index = co * width + ci;
+                    let weight = network_weights[ci][co];
+                    weightsData[index] = weight;
+                }
+            }
+            let texture = new THREE.DataTexture(
+            weightsData,
+            width,
+            height,
+            THREE.RedFormat,
+            THREE.FloatType
+            );
+            texture.magFilter = THREE.NearestFilter;
+            texture.minFilter = THREE.NearestFilter;
+            texture.needsUpdate = true;
+            return texture;
+        }
+
+        /**
+         * Creates shader code for the view-dependence MLP.
+         *
+         * This populates the shader code in viewDependenceNetworkShaderFunctions with
+         * network weights and sizes as compile-time constants. The result is returned
+         * as a string.
+         *
+         * @param {!Object} scene_params
+         * @return {string}
+         */
+        function createViewDependenceFunctions(network_weights) {
+            let width = network_weights["0_bias"].length;
+            let biasListZero = "";
+            for (let i = 0; i < width; i++) {
+                let bias = network_weights["0_bias"][i];
+                biasListZero += Number(bias).toFixed(7);
+                if (i + 1 < width) {
+                    biasListZero += ", ";
+                }
+            }
+
+            width = network_weights["1_bias"].length;
+            let biasListOne = "";
+            for (let i = 0; i < width; i++) {
+                let bias = network_weights["1_bias"][i];
+                biasListOne += Number(bias).toFixed(7);
+                if (i + 1 < width) {
+                    biasListOne += ", ";
+                }
+            }
+
+            width = network_weights["2_bias"].length;
+            let biasListTwo = "";
+            for (let i = 0; i < width; i++) {
+                let bias = network_weights["2_bias"][i];
+                biasListTwo += Number(bias).toFixed(7);
+                if (i + 1 < width) {
+                    biasListTwo += ", ";
+                }
+            }
+
+            let channelsZero = network_weights["0_weights"].length;
+            let channelsOne = network_weights["0_bias"].length;
+            let channelsTwo = network_weights["1_bias"].length;
+            let channelsThree = network_weights["2_bias"].length;
+
+            let fragmentShaderSource = viewDependenceNetworkShaderFunctions.replace(
+            new RegExp("NUM_CHANNELS_ZERO", "g"),
+            channelsZero
+            );
+            fragmentShaderSource = fragmentShaderSource.replace(
+            new RegExp("NUM_CHANNELS_ONE", "g"),
+            channelsOne
+            );
+            fragmentShaderSource = fragmentShaderSource.replace(
+            new RegExp("NUM_CHANNELS_TWO", "g"),
+            channelsTwo
+            );
+            fragmentShaderSource = fragmentShaderSource.replace(
+            new RegExp("NUM_CHANNELS_THREE", "g"),
+            channelsThree
+            );
+
+            fragmentShaderSource = fragmentShaderSource.replace(
+            new RegExp("BIAS_LIST_ZERO", "g"),
+            biasListZero
+            );
+            fragmentShaderSource = fragmentShaderSource.replace(
+            new RegExp("BIAS_LIST_ONE", "g"),
+            biasListOne
+            );
+            fragmentShaderSource = fragmentShaderSource.replace(
+            new RegExp("BIAS_LIST_TWO", "g"),
+            biasListTwo
+            );
+
+            return fragmentShaderSource;
+        }
+
+        // container = document.getElementById("container");
+        const preset_size_w = 80;
+        const preset_size_h = 80;
+        // container.appendChild(renderer.domElement);
+        let renderer, renderTarget; 
+        renderer = new THREE.WebGLRenderer({
+            powerPreference: "high-performance",
+            precision: "highp",
+        });
+        renderer.setPixelRatio(1);
+        renderer.setSize(preset_size_w, preset_size_h);
+        renderer.setClearColor(new THREE.Color("rgb(0, 0, 0)"), 0.5);
+
+        renderTarget = new THREE.WebGLMultipleRenderTargets(
+            preset_size_w * 2,
+            preset_size_h * 2,
+            3
+        );
+
+        for (let i = 0, il = renderTarget.texture.length; i < il; i++) {
+            // const paragraph = document.createElement('p');
+            // paragraph.innerHTML = `<strong>${i}:</strong>}`;
+            // outputElement.appendChild(paragraph);
+            renderTarget.texture[i].minFilter = THREE.LinearFilter;
+            renderTarget.texture[i].magFilter = THREE.LinearFilter;
+            renderTarget.texture[i].type = THREE.FloatType;
+        }
+
+
+        // load a resource
+
+        fetch("chair_phone/mlp.json")
+            .then((response) => {
+            return response.json();
+            })
+            .then((json) => {
+                for (let i = 0, il = json["obj_num"]; i < il; i++) {
+                let tex0 = new THREE.TextureLoader().load(
+                    "chair_phone/shape" + i.toFixed(0) + ".png" + "feat0.png",
+                    () => {
+                        this.mbn_render(renderer, renderTarget);
+                    }
+                );
+                tex0.magFilter = THREE.NearestFilter;
+                tex0.minFilter = THREE.NearestFilter;
+                let tex1 = new THREE.TextureLoader().load(
+                    "chair_phone/shape" + i.toFixed(0) + ".png" + "feat1.png",
+                    () => {
+                        this.mbn_render(renderer, renderTarget);
+                    }
+                );
+                tex1.magFilter = THREE.NearestFilter;
+                tex1.minFilter = THREE.NearestFilter;
+                let newmat = new THREE.RawShaderMaterial({
+                    side: THREE.DoubleSide,
+                    vertexShader: document
+                    .querySelector("#gbuffer-vert")
+                    .textContent.trim(),
+                    fragmentShader: document
+                    .querySelector("#gbuffer-frag")
+                    .textContent.trim(),
+                    uniforms: {
+                    tDiffuse0: { value: tex0 },
+                    tDiffuse1: { value: tex1 },
+                    },
+                    glslVersion: THREE.GLSL3,
+                });
+                
+                new OBJLoader().load(
+                    "chair_phone/shape" + i.toFixed(0) + ".obj",
+                    object => {
+                        // Problem 
+                        object.traverse(function (child) {
+                            if (child.type == "Mesh") {
+                            child.material = newmat;
+                            }
+                        });
+
+                        // mannually set mbn object position 
+                        object.scale.set(50, 50, 50); 
+                        object.position.x = 100;
+                        object.position.y = 50;
+                        object.position.z = 150;
+                        // let mbnRoomItem = new Physical3DItem(object, this.dragcontrols, this.__options);
+                        this.add(object);
+                    });
+                }
+                let network_weights = json;
+                let fragmentShaderSource =
+                createViewDependenceFunctions(network_weights);
+                let weightsTexZero = createNetworkWeightTexture(
+                network_weights["0_weights"]
+                );
+                let weightsTexOne = createNetworkWeightTexture(
+                network_weights["1_weights"]
+                );
+                let weightsTexTwo = createNetworkWeightTexture(
+                network_weights["2_weights"]
+                );
+                
+                // for (const key in fragmentShaderSource) {
+                //     document.write(`<p><strong>${key}:</strong> ${fragmentShaderSource[key]}</p>`);
+                // }
+
+                // PostProcessing setup
+                let postScene, postCamera; 
+                postScene = new THREE.Scene();
+                postScene.background = new THREE.Color("rgb(255, 255, 255)");
+                //postScene.background = new THREE.Color("rgb(128, 128, 128)");
+                postCamera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
+                postScene.add(
+                    new THREE.Mesh(
+                        new THREE.PlaneGeometry(2, 2),
+                        new THREE.RawShaderMaterial({
+                        vertexShader: document
+                            .querySelector("#render-vert")
+                            .textContent.trim(),
+                        fragmentShader: fragmentShaderSource,
+                        uniforms: {
+                            tDiffuse0x: { value: renderTarget.texture[0] },
+                            tDiffuse1x: { value: renderTarget.texture[1] },
+                            tDiffuse2x: { value: renderTarget.texture[2] },
+                            weightsZero: { value: weightsTexZero },
+                            weightsOne: { value: weightsTexOne },
+                            weightsTwo: { value: weightsTexTwo },
+                        },
+                        glslVersion: THREE.GLSL3,
+                        })
+                    )
+                );
+            this.mbn_render(renderer, renderTarget);    
+            });
+            
+        // mbn
+
         scope.model.addEventListener(EVENT_NEW_ITEM, scope.__newItemEvent);
         scope.model.addEventListener(EVENT_MODE_RESET, scope.__resetDesignEvent);
         scope.model.addEventListener(EVENT_LOADED, scope.addRoomItems.bind(scope));
@@ -247,340 +585,342 @@ export class Viewer3D extends Scene {
         this.__physicalRoomItems.length = 0; //A cool way to clear an array in javascript
         // mbn
 
-        const viewDependenceNetworkShaderFunctions = `
-            precision mediump float;
+        // const viewDependenceNetworkShaderFunctions = `
+        //     precision mediump float;
 
-            layout(location = 0) out vec4 pc_FragColor;
+        //     layout(location = 0) out vec4 pc_FragColor;
 
-            in vec2 vUv;
+        //     in vec2 vUv;
 
-            uniform mediump sampler2D tDiffuse0x;
-            uniform mediump sampler2D tDiffuse1x;
-            uniform mediump sampler2D tDiffuse2x;
+        //     uniform mediump sampler2D tDiffuse0x;
+        //     uniform mediump sampler2D tDiffuse1x;
+        //     uniform mediump sampler2D tDiffuse2x;
 
-            uniform mediump sampler2D weightsZero;
-            uniform mediump sampler2D weightsOne;
-            uniform mediump sampler2D weightsTwo;
+        //     uniform mediump sampler2D weightsZero;
+        //     uniform mediump sampler2D weightsOne;
+        //     uniform mediump sampler2D weightsTwo;
 
-            mediump vec3 evaluateNetwork( mediump vec4 f0, mediump vec4 f1, mediump vec4 viewdir) {
-                mediump float intermediate_one[NUM_CHANNELS_ONE] = float[](
-                    BIAS_LIST_ZERO
-                );
-                for (int j = 0; j < NUM_CHANNELS_ZERO; ++j) {
-                    mediump float input_value = 0.0;
-                    if (j < 4) {
-                    input_value =
-                        (j == 0) ? f0.r : (
-                        (j == 1) ? f0.g : (
-                        (j == 2) ? f0.b : f0.a));
-                    } else if (j < 8) {
-                    input_value =
-                        (j == 4) ? f1.r : (
-                        (j == 5) ? f1.g : (
-                        (j == 6) ? f1.b : f1.a));
-                    } else {
-                    input_value =
-                        (j == 8) ? viewdir.r : (
-                        (j == 9) ? -viewdir.b : viewdir.g); //switch y-z axes
-                    }
-                    for (int i = 0; i < NUM_CHANNELS_ONE; ++i) {
-                    intermediate_one[i] += input_value *
-                        texelFetch(weightsZero, ivec2(j, i), 0).x;
-                    }
-                }
-                mediump float intermediate_two[NUM_CHANNELS_TWO] = float[](
-                    BIAS_LIST_ONE
-                );
-                for (int j = 0; j < NUM_CHANNELS_ONE; ++j) {
-                    if (intermediate_one[j] <= 0.0) {
-                        continue;
-                    }
-                    for (int i = 0; i < NUM_CHANNELS_TWO; ++i) {
-                        intermediate_two[i] += intermediate_one[j] *
-                            texelFetch(weightsOne, ivec2(j, i), 0).x;
-                    }
-                }
-                mediump float result[NUM_CHANNELS_THREE] = float[](
-                    BIAS_LIST_TWO
-                );
-                for (int j = 0; j < NUM_CHANNELS_TWO; ++j) {
-                    if (intermediate_two[j] <= 0.0) {
-                        continue;
-                    }
-                    for (int i = 0; i < NUM_CHANNELS_THREE; ++i) {
-                        result[i] += intermediate_two[j] *
-                            texelFetch(weightsTwo, ivec2(j, i), 0).x;
-                    }
-                }
-                for (int i = 0; i < NUM_CHANNELS_THREE; ++i) {
-                    result[i] = 1.0 / (1.0 + exp(-result[i]));
-                }
-                return vec3(result[0]*viewdir.a+(1.0-viewdir.a),
-                            result[1]*viewdir.a+(1.0-viewdir.a),
-                            result[2]*viewdir.a+(1.0-viewdir.a));
-                }
+        //     mediump vec3 evaluateNetwork( mediump vec4 f0, mediump vec4 f1, mediump vec4 viewdir) {
+        //         mediump float intermediate_one[NUM_CHANNELS_ONE] = float[](
+        //             BIAS_LIST_ZERO
+        //         );
+        //         for (int j = 0; j < NUM_CHANNELS_ZERO; ++j) {
+        //             mediump float input_value = 0.0;
+        //             if (j < 4) {
+        //             input_value =
+        //                 (j == 0) ? f0.r : (
+        //                 (j == 1) ? f0.g : (
+        //                 (j == 2) ? f0.b : f0.a));
+        //             } else if (j < 8) {
+        //             input_value =
+        //                 (j == 4) ? f1.r : (
+        //                 (j == 5) ? f1.g : (
+        //                 (j == 6) ? f1.b : f1.a));
+        //             } else {
+        //             input_value =
+        //                 (j == 8) ? viewdir.r : (
+        //                 (j == 9) ? -viewdir.b : viewdir.g); //switch y-z axes
+        //             }
+        //             for (int i = 0; i < NUM_CHANNELS_ONE; ++i) {
+        //             intermediate_one[i] += input_value *
+        //                 texelFetch(weightsZero, ivec2(j, i), 0).x;
+        //             }
+        //         }
+        //         mediump float intermediate_two[NUM_CHANNELS_TWO] = float[](
+        //             BIAS_LIST_ONE
+        //         );
+        //         for (int j = 0; j < NUM_CHANNELS_ONE; ++j) {
+        //             if (intermediate_one[j] <= 0.0) {
+        //                 continue;
+        //             }
+        //             for (int i = 0; i < NUM_CHANNELS_TWO; ++i) {
+        //                 intermediate_two[i] += intermediate_one[j] *
+        //                     texelFetch(weightsOne, ivec2(j, i), 0).x;
+        //             }
+        //         }
+        //         mediump float result[NUM_CHANNELS_THREE] = float[](
+        //             BIAS_LIST_TWO
+        //         );
+        //         for (int j = 0; j < NUM_CHANNELS_TWO; ++j) {
+        //             if (intermediate_two[j] <= 0.0) {
+        //                 continue;
+        //             }
+        //             for (int i = 0; i < NUM_CHANNELS_THREE; ++i) {
+        //                 result[i] += intermediate_two[j] *
+        //                     texelFetch(weightsTwo, ivec2(j, i), 0).x;
+        //             }
+        //         }
+        //         for (int i = 0; i < NUM_CHANNELS_THREE; ++i) {
+        //             result[i] = 1.0 / (1.0 + exp(-result[i]));
+        //         }
+        //         return vec3(result[0]*viewdir.a+(1.0-viewdir.a),
+        //                     result[1]*viewdir.a+(1.0-viewdir.a),
+        //                     result[2]*viewdir.a+(1.0-viewdir.a));
+        //         }
 
 
-            void main() {
+        //     void main() {
 
-                vec4 diffuse0 = texture( tDiffuse0x, vUv );
-                if (diffuse0.a < 0.6) discard;
-                vec4 diffuse1 = texture( tDiffuse1x, vUv );
-                vec4 diffuse2 = texture( tDiffuse2x, vUv );
+        //         vec4 diffuse0 = texture( tDiffuse0x, vUv );
+        //         if (diffuse0.a < 0.6) discard;
+        //         vec4 diffuse1 = texture( tDiffuse1x, vUv );
+        //         vec4 diffuse2 = texture( tDiffuse2x, vUv );
 
-                //deal with iphone
-                diffuse0.a = diffuse0.a*2.0-1.0;
-                diffuse1.a = diffuse1.a*2.0-1.0;
-                diffuse2.a = diffuse2.a*2.0-1.0;
+        //         //deal with iphone
+        //         diffuse0.a = diffuse0.a*2.0-1.0;
+        //         diffuse1.a = diffuse1.a*2.0-1.0;
+        //         diffuse2.a = diffuse2.a*2.0-1.0;
 
-                //pc_FragColor.rgb  = diffuse1.rgb;
-                pc_FragColor.rgb = evaluateNetwork(diffuse1,diffuse2,diffuse0);
-                pc_FragColor.a = 1.0;
-            }
-        `;
+        //         //pc_FragColor.rgb  = diffuse1.rgb;
+        //         pc_FragColor.rgb = evaluateNetwork(diffuse1,diffuse2,diffuse0);
+        //         pc_FragColor.a = 1.0;
+        //     }
+        // `;
         
-        /**
-                 * Creates a data texture containing MLP weights.
-                 *
-                 * @param {!Object} network_weights
-                 * @return {!THREE.DataTexture}
-                 */
-        function createNetworkWeightTexture(network_weights) {
-            let width = network_weights.length;
-            let height = network_weights[0].length;
+        // /**
+        //          * Creates a data texture containing MLP weights.
+        //          *
+        //          * @param {!Object} network_weights
+        //          * @return {!THREE.DataTexture}
+        //          */
+        // function createNetworkWeightTexture(network_weights) {
+        //     let width = network_weights.length;
+        //     let height = network_weights[0].length;
 
-            let weightsData = new Float32Array(width * height);
-            for (let co = 0; co < height; co++) {
-                for (let ci = 0; ci < width; ci++) {
-                    let index = co * width + ci;
-                    let weight = network_weights[ci][co];
-                    weightsData[index] = weight;
-                }
-            }
-            let texture = new THREE.DataTexture(
-            weightsData,
-            width,
-            height,
-            THREE.RedFormat,
-            THREE.FloatType
-            );
-            texture.magFilter = THREE.NearestFilter;
-            texture.minFilter = THREE.NearestFilter;
-            texture.needsUpdate = true;
-            return texture;
-        }
+        //     let weightsData = new Float32Array(width * height);
+        //     for (let co = 0; co < height; co++) {
+        //         for (let ci = 0; ci < width; ci++) {
+        //             let index = co * width + ci;
+        //             let weight = network_weights[ci][co];
+        //             weightsData[index] = weight;
+        //         }
+        //     }
+        //     let texture = new THREE.DataTexture(
+        //     weightsData,
+        //     width,
+        //     height,
+        //     THREE.RedFormat,
+        //     THREE.FloatType
+        //     );
+        //     texture.magFilter = THREE.NearestFilter;
+        //     texture.minFilter = THREE.NearestFilter;
+        //     texture.needsUpdate = true;
+        //     return texture;
+        // }
 
-        /**
-         * Creates shader code for the view-dependence MLP.
-         *
-         * This populates the shader code in viewDependenceNetworkShaderFunctions with
-         * network weights and sizes as compile-time constants. The result is returned
-         * as a string.
-         *
-         * @param {!Object} scene_params
-         * @return {string}
-         */
-        function createViewDependenceFunctions(network_weights) {
-            let width = network_weights["0_bias"].length;
-            let biasListZero = "";
-            for (let i = 0; i < width; i++) {
-                let bias = network_weights["0_bias"][i];
-                biasListZero += Number(bias).toFixed(7);
-                if (i + 1 < width) {
-                    biasListZero += ", ";
-                }
-            }
+        // /**
+        //  * Creates shader code for the view-dependence MLP.
+        //  *
+        //  * This populates the shader code in viewDependenceNetworkShaderFunctions with
+        //  * network weights and sizes as compile-time constants. The result is returned
+        //  * as a string.
+        //  *
+        //  * @param {!Object} scene_params
+        //  * @return {string}
+        //  */
+        // function createViewDependenceFunctions(network_weights) {
+        //     let width = network_weights["0_bias"].length;
+        //     let biasListZero = "";
+        //     for (let i = 0; i < width; i++) {
+        //         let bias = network_weights["0_bias"][i];
+        //         biasListZero += Number(bias).toFixed(7);
+        //         if (i + 1 < width) {
+        //             biasListZero += ", ";
+        //         }
+        //     }
 
-            width = network_weights["1_bias"].length;
-            let biasListOne = "";
-            for (let i = 0; i < width; i++) {
-                let bias = network_weights["1_bias"][i];
-                biasListOne += Number(bias).toFixed(7);
-                if (i + 1 < width) {
-                    biasListOne += ", ";
-                }
-            }
+        //     width = network_weights["1_bias"].length;
+        //     let biasListOne = "";
+        //     for (let i = 0; i < width; i++) {
+        //         let bias = network_weights["1_bias"][i];
+        //         biasListOne += Number(bias).toFixed(7);
+        //         if (i + 1 < width) {
+        //             biasListOne += ", ";
+        //         }
+        //     }
 
-            width = network_weights["2_bias"].length;
-            let biasListTwo = "";
-            for (let i = 0; i < width; i++) {
-                let bias = network_weights["2_bias"][i];
-                biasListTwo += Number(bias).toFixed(7);
-                if (i + 1 < width) {
-                    biasListTwo += ", ";
-                }
-            }
+        //     width = network_weights["2_bias"].length;
+        //     let biasListTwo = "";
+        //     for (let i = 0; i < width; i++) {
+        //         let bias = network_weights["2_bias"][i];
+        //         biasListTwo += Number(bias).toFixed(7);
+        //         if (i + 1 < width) {
+        //             biasListTwo += ", ";
+        //         }
+        //     }
 
-            let channelsZero = network_weights["0_weights"].length;
-            let channelsOne = network_weights["0_bias"].length;
-            let channelsTwo = network_weights["1_bias"].length;
-            let channelsThree = network_weights["2_bias"].length;
+        //     let channelsZero = network_weights["0_weights"].length;
+        //     let channelsOne = network_weights["0_bias"].length;
+        //     let channelsTwo = network_weights["1_bias"].length;
+        //     let channelsThree = network_weights["2_bias"].length;
 
-            let fragmentShaderSource = viewDependenceNetworkShaderFunctions.replace(
-            new RegExp("NUM_CHANNELS_ZERO", "g"),
-            channelsZero
-            );
-            fragmentShaderSource = fragmentShaderSource.replace(
-            new RegExp("NUM_CHANNELS_ONE", "g"),
-            channelsOne
-            );
-            fragmentShaderSource = fragmentShaderSource.replace(
-            new RegExp("NUM_CHANNELS_TWO", "g"),
-            channelsTwo
-            );
-            fragmentShaderSource = fragmentShaderSource.replace(
-            new RegExp("NUM_CHANNELS_THREE", "g"),
-            channelsThree
-            );
+        //     let fragmentShaderSource = viewDependenceNetworkShaderFunctions.replace(
+        //     new RegExp("NUM_CHANNELS_ZERO", "g"),
+        //     channelsZero
+        //     );
+        //     fragmentShaderSource = fragmentShaderSource.replace(
+        //     new RegExp("NUM_CHANNELS_ONE", "g"),
+        //     channelsOne
+        //     );
+        //     fragmentShaderSource = fragmentShaderSource.replace(
+        //     new RegExp("NUM_CHANNELS_TWO", "g"),
+        //     channelsTwo
+        //     );
+        //     fragmentShaderSource = fragmentShaderSource.replace(
+        //     new RegExp("NUM_CHANNELS_THREE", "g"),
+        //     channelsThree
+        //     );
 
-            fragmentShaderSource = fragmentShaderSource.replace(
-            new RegExp("BIAS_LIST_ZERO", "g"),
-            biasListZero
-            );
-            fragmentShaderSource = fragmentShaderSource.replace(
-            new RegExp("BIAS_LIST_ONE", "g"),
-            biasListOne
-            );
-            fragmentShaderSource = fragmentShaderSource.replace(
-            new RegExp("BIAS_LIST_TWO", "g"),
-            biasListTwo
-            );
+        //     fragmentShaderSource = fragmentShaderSource.replace(
+        //     new RegExp("BIAS_LIST_ZERO", "g"),
+        //     biasListZero
+        //     );
+        //     fragmentShaderSource = fragmentShaderSource.replace(
+        //     new RegExp("BIAS_LIST_ONE", "g"),
+        //     biasListOne
+        //     );
+        //     fragmentShaderSource = fragmentShaderSource.replace(
+        //     new RegExp("BIAS_LIST_TWO", "g"),
+        //     biasListTwo
+        //     );
 
-            return fragmentShaderSource;
-        }
+        //     return fragmentShaderSource;
+        // }
 
-        // container = document.getElementById("container");
-        const preset_size_w = 800;
-        const preset_size_h = 800;
-        // container.appendChild(renderer.domElement);
-        let renderer, renderTarget; 
-        renderer = new THREE.WebGLRenderer({
-            powerPreference: "high-performance",
-            precision: "highp",
-        });
-        renderer.setPixelRatio(1);
-        renderer.setSize(preset_size_w, preset_size_h);
-        renderer.setClearColor(new THREE.Color("rgb(0, 0, 0)"), 0.5);
+        // // container = document.getElementById("container");
+        // const preset_size_w = 80;
+        // const preset_size_h = 80;
+        // // container.appendChild(renderer.domElement);
+        // let renderer, renderTarget; 
+        // renderer = new THREE.WebGLRenderer({
+        //     powerPreference: "high-performance",
+        //     precision: "highp",
+        // });
+        // renderer.setPixelRatio(1);
+        // renderer.setSize(preset_size_w, preset_size_h);
+        // renderer.setClearColor(new THREE.Color("rgb(0, 0, 0)"), 0.5);
 
-        renderTarget = new THREE.WebGLMultipleRenderTargets(
-            preset_size_w * 2,
-            preset_size_h * 2,
-            3
-        );
+        // renderTarget = new THREE.WebGLMultipleRenderTargets(
+        //     preset_size_w * 2,
+        //     preset_size_h * 2,
+        //     3
+        // );
 
-        for (let i = 0, il = renderTarget.texture.length; i < il; i++) {
-            // const paragraph = document.createElement('p');
-            // paragraph.innerHTML = `<strong>${i}:</strong>}`;
-            // outputElement.appendChild(paragraph);
-            renderTarget.texture[i].minFilter = THREE.LinearFilter;
-            renderTarget.texture[i].magFilter = THREE.LinearFilter;
-            renderTarget.texture[i].type = THREE.FloatType;
-        }
+        // for (let i = 0, il = renderTarget.texture.length; i < il; i++) {
+        //     // const paragraph = document.createElement('p');
+        //     // paragraph.innerHTML = `<strong>${i}:</strong>}`;
+        //     // outputElement.appendChild(paragraph);
+        //     renderTarget.texture[i].minFilter = THREE.LinearFilter;
+        //     renderTarget.texture[i].magFilter = THREE.LinearFilter;
+        //     renderTarget.texture[i].type = THREE.FloatType;
+        // }
 
 
-        // load a resource
+        // // load a resource
 
-        fetch("chair_phone/mlp.json")
-            .then((response) => {
-            return response.json();
-            })
-            .then((json) => {
-                for (let i = 0, il = json["obj_num"]; i < il; i++) {
-                  let tex0 = new THREE.TextureLoader().load(
-                    "chair_phone/shape" + i.toFixed(0) + ".png" + "feat0.png",
-                    () => {
-                        this.mbn_render(renderTarget);
-                    }
-                  );
-                  tex0.magFilter = THREE.NearestFilter;
-                  tex0.minFilter = THREE.NearestFilter;
-                  let tex1 = new THREE.TextureLoader().load(
-                      "chair_phone/shape" + i.toFixed(0) + ".png" + "feat1.png",
-                    () => {
-                        this.mbn_render(renderTarget);
-                    }
-                  );
-                  tex1.magFilter = THREE.NearestFilter;
-                  tex1.minFilter = THREE.NearestFilter;
-                  let newmat = new THREE.RawShaderMaterial({
-                    side: THREE.DoubleSide,
-                    vertexShader: document
-                      .querySelector("#gbuffer-vert")
-                      .textContent.trim(),
-                    fragmentShader: document
-                      .querySelector("#gbuffer-frag")
-                      .textContent.trim(),
-                    uniforms: {
-                      tDiffuse0: { value: tex0 },
-                      tDiffuse1: { value: tex1 },
-                    },
-                    glslVersion: THREE.GLSL3,
-                });
+        // fetch("chair_phone/mlp.json")
+        //     .then((response) => {
+        //     return response.json();
+        //     })
+        //     .then((json) => {
+        //         for (let i = 0, il = json["obj_num"]; i < il; i++) {
+        //           let tex0 = new THREE.TextureLoader().load(
+        //             "chair_phone/shape" + i.toFixed(0) + ".png" + "feat0.png",
+        //             () => {
+        //                 this.mbn_render(renderer, renderTarget);
+        //             }
+        //           );
+        //           tex0.magFilter = THREE.NearestFilter;
+        //           tex0.minFilter = THREE.NearestFilter;
+        //           let tex1 = new THREE.TextureLoader().load(
+        //               "chair_phone/shape" + i.toFixed(0) + ".png" + "feat1.png",
+        //             () => {
+        //                 this.mbn_render(renderer, renderTarget);
+        //             }
+        //           );
+        //           tex1.magFilter = THREE.NearestFilter;
+        //           tex1.minFilter = THREE.NearestFilter;
+        //           let newmat = new THREE.RawShaderMaterial({
+        //             side: THREE.DoubleSide,
+        //             vertexShader: document
+        //               .querySelector("#gbuffer-vert")
+        //               .textContent.trim(),
+        //             fragmentShader: document
+        //               .querySelector("#gbuffer-frag")
+        //               .textContent.trim(),
+        //             uniforms: {
+        //               tDiffuse0: { value: tex0 },
+        //               tDiffuse1: { value: tex1 },
+        //             },
+        //             glslVersion: THREE.GLSL3,
+        //         });
                 
-                new OBJLoader().load(
-                    "chair_phone/shape" + i.toFixed(0) + ".obj",
-                    object => {
-                        // Problem 
-                        object.traverse(function (child) {
-                            if (child.type == "Mesh") {
-                            child.material = newmat;
-                            }
-                        });
-                        object.scale.set(50, 50, 50); 
-                        object.position.x = 100;
-                        object.position.y = 50;
-                        object.position.z = 150;
-                        // let mbnRoomItem = new Physical3DItem(object, this.dragcontrols, this.__options);
-                        this.add(object);
-                    });
-                }
-                let network_weights = json;
-                let fragmentShaderSource =
-                createViewDependenceFunctions(network_weights);
-                let weightsTexZero = createNetworkWeightTexture(
-                network_weights["0_weights"]
-                );
-                let weightsTexOne = createNetworkWeightTexture(
-                network_weights["1_weights"]
-                );
-                let weightsTexTwo = createNetworkWeightTexture(
-                network_weights["2_weights"]
-                );
-                
-                // for (const key in fragmentShaderSource) {
-                //     document.write(`<p><strong>${key}:</strong> ${fragmentShaderSource[key]}</p>`);
-                // }
+        //         new OBJLoader().load(
+        //             "chair_phone/shape" + i.toFixed(0) + ".obj",
+        //             object => {
+        //                 // Problem 
+        //                 object.traverse(function (child) {
+        //                     if (child.type == "Mesh") {
+        //                     child.material = newmat;
+        //                     }
+        //                 });
 
-                // PostProcessing setup
-                let postScene, postCamera; 
-                postScene = new THREE.Scene();
-                postScene.background = new THREE.Color("rgb(255, 255, 255)");
-                //postScene.background = new THREE.Color("rgb(128, 128, 128)");
-                postCamera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
-                postScene.add(
-                    new THREE.Mesh(
-                        new THREE.PlaneGeometry(2, 2),
-                        new THREE.RawShaderMaterial({
-                        vertexShader: document
-                            .querySelector("#render-vert")
-                            .textContent.trim(),
-                        fragmentShader: fragmentShaderSource,
-                        uniforms: {
-                            tDiffuse0x: { value: renderTarget.texture[0] },
-                            tDiffuse1x: { value: renderTarget.texture[1] },
-                            tDiffuse2x: { value: renderTarget.texture[2] },
-                            weightsZero: { value: weightsTexZero },
-                            weightsOne: { value: weightsTexOne },
-                            weightsTwo: { value: weightsTexTwo },
-                        },
-                        glslVersion: THREE.GLSL3,
-                        })
-                    )
-                );
+        //                 // mannually set mbn object position 
+        //                 object.scale.set(50, 50, 50); 
+        //                 object.position.x = 100;
+        //                 object.position.y = 50;
+        //                 object.position.z = 150;
+        //                 // let mbnRoomItem = new Physical3DItem(object, this.dragcontrols, this.__options);
+        //                 this.add(object);
+        //             });
+        //         }
+        //         let network_weights = json;
+        //         let fragmentShaderSource =
+        //         createViewDependenceFunctions(network_weights);
+        //         let weightsTexZero = createNetworkWeightTexture(
+        //         network_weights["0_weights"]
+        //         );
+        //         let weightsTexOne = createNetworkWeightTexture(
+        //         network_weights["1_weights"]
+        //         );
+        //         let weightsTexTwo = createNetworkWeightTexture(
+        //         network_weights["2_weights"]
+        //         );
                 
-            });
+        //         // for (const key in fragmentShaderSource) {
+        //         //     document.write(`<p><strong>${key}:</strong> ${fragmentShaderSource[key]}</p>`);
+        //         // }
+
+        //         // PostProcessing setup
+        //         let postScene, postCamera; 
+        //         postScene = new THREE.Scene();
+        //         postScene.background = new THREE.Color("rgb(255, 255, 255)");
+        //         //postScene.background = new THREE.Color("rgb(128, 128, 128)");
+        //         postCamera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
+        //         postScene.add(
+        //             new THREE.Mesh(
+        //                 new THREE.PlaneGeometry(2, 2),
+        //                 new THREE.RawShaderMaterial({
+        //                 vertexShader: document
+        //                     .querySelector("#render-vert")
+        //                     .textContent.trim(),
+        //                 fragmentShader: fragmentShaderSource,
+        //                 uniforms: {
+        //                     tDiffuse0x: { value: renderTarget.texture[0] },
+        //                     tDiffuse1x: { value: renderTarget.texture[1] },
+        //                     tDiffuse2x: { value: renderTarget.texture[2] },
+        //                     weightsZero: { value: weightsTexZero },
+        //                     weightsOne: { value: weightsTexOne },
+        //                     weightsTwo: { value: weightsTexTwo },
+        //                 },
+        //                 glslVersion: THREE.GLSL3,
+        //                 })
+        //             )
+        //         );
+        //     this.mbn_render(renderer, renderTarget);    
+        //     });
             
-        // mbn 
+        // // mbn 
         
         let roomItems = this.model.roomItems;
         for (i = 0; i < roomItems.length; i++) {
@@ -591,14 +931,15 @@ export class Viewer3D extends Scene {
     }
 
     // mbn
-    mbn_render(renderTarget) {
+    mbn_render(renderer, renderTarget) {
         // render scene into target
         // Problem 
-        for (const key in renderTarget) {
-            console.log(`<p><strong>${key}:</strong> ${renderTarget[key]}</p>`);
-        }
-        // this.renderer.setRenderTarget(renderTarget);
-        this.renderer.render(this, this.camera);
+        // for (const key in renderTarget) {
+        //     console.log(`<p><strong>${key}:</strong> ${renderTarget[key]}</p>`);
+        // }
+        // renderer.setRenderTarget(renderTarget);
+        renderer.render(this, this.camera);
+        // renderer.render(this.postScene, this.postCamera); 
     }
     // mbn
 
