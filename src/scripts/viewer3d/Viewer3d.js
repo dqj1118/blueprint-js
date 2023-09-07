@@ -334,8 +334,8 @@ export class Viewer3D extends Scene {
         }
 
         // container = document.getElementById("container");
-        const preset_size_w = 80;
-        const preset_size_h = 80;
+        const preset_size_w = 100;
+        const preset_size_h = 100;
         // container.appendChild(renderer.domElement);
         let renderer, renderTarget; 
         // renderer = new THREE.WebGLRenderer({
@@ -346,88 +346,88 @@ export class Viewer3D extends Scene {
         // renderer.setSize(preset_size_w, preset_size_h);
         // renderer.setClearColor(new THREE.Color("rgb(0, 0, 0)"), 0.5);
 
-        // renderTarget = new THREE.WebGLMultipleRenderTargets(
-        //     preset_size_w * 2,
-        //     preset_size_h * 2,
-        //     3
-        // );
+        scope.renderTarget = new THREE.WebGLMultipleRenderTargets(
+            preset_size_w * 2,
+            preset_size_h * 2,
+            3
+        );
 
-        // for (let i = 0, il = renderTarget.texture.length; i < il; i++) {
-        //     // const paragraph = document.createElement('p');
-        //     // paragraph.innerHTML = `<strong>${i}:</strong>}`;
-        //     // outputElement.appendChild(paragraph);
-        //     renderTarget.texture[i].minFilter = THREE.LinearFilter;
-        //     renderTarget.texture[i].magFilter = THREE.LinearFilter;
-        //     renderTarget.texture[i].type = THREE.FloatType;
-        // }
-
-        // for (let i = 0, il = cubeRenderTarget.texture.length; i < il; i++) {
-        //     cubeRenderTarget.texture[i].minFilter = THREE.LinearFilter;
-        //     cubeRenderTarget.texture[i].magFilter = THREE.LinearFilter;
-        //     cubeRenderTarget.texture[i].type = THREE.FloatType;
-        // }
-
+        for (let i = 0, il = scope.renderTarget.texture.length; i < il; i++) {
+            // const paragraph = document.createElement('p');
+            // paragraph.innerHTML = `<strong>${i}:</strong>}`;
+            // outputElement.appendChild(paragraph);
+            scope.renderTarget.texture[i].minFilter = THREE.LinearFilter;
+            scope.renderTarget.texture[i].magFilter = THREE.LinearFilter;
+            scope.renderTarget.texture[i].type = THREE.FloatType;
+        }
 
         // load a resource
+ 
 
         fetch("chair_phone/mlp.json")
             .then((response) => {
             return response.json();
             })
             .then((json) => {
-                for (let i = 0, il = json["obj_num"]; i < il; i++) {
-                let tex0 = new THREE.TextureLoader().load(
-                    "chair_phone/shape" + i.toFixed(0) + ".png" + "feat0.png",
-                    () => {
-                        this.mbn_render(cubeRenderTarget, scope); 
-                    }
-                );
-                tex0.magFilter = THREE.NearestFilter;
-                tex0.minFilter = THREE.NearestFilter;
-                let tex1 = new THREE.TextureLoader().load(
-                    "chair_phone/shape" + i.toFixed(0) + ".png" + "feat1.png",
-                    () => {
-                        this.mbn_render(cubeRenderTarget, scope); 
-                    }
-                );
-                tex1.magFilter = THREE.NearestFilter;
-                tex1.minFilter = THREE.NearestFilter;
-                let newmat = new THREE.RawShaderMaterial({
-                    side: THREE.DoubleSide,
-                    vertexShader: document
-                    .querySelector("#gbuffer-vert")
-                    .textContent.trim(),
-                    fragmentShader: document
-                    .querySelector("#gbuffer-frag")
-                    .textContent.trim(),
-                    uniforms: {
-                    tDiffuse0: { value: tex0 },
-                    tDiffuse1: { value: tex1 },
-                    },
-                    glslVersion: THREE.GLSL3,
-                });
-                // newmat.colorWrite = false; 
-                
-                new OBJLoader().load(
-                    "chair_phone/shape" + i.toFixed(0) + ".obj",
-                    object => {
-                        // Problem 
-                        object.traverse(function (child) {
-                            if (child.type == "Mesh") {
-                                child.material = newmat;
-                                child.material
-                            }
-                        });
+                scope.objects = [];
 
-                        // mannually set mbn object position 
-                        object.scale.set(50, 50, 50); 
-                        object.position.x = 100;
-                        object.position.y = 50;
-                        object.position.z = 150;
-                        // let mbnRoomItem = new Physical3DItem(object, this.dragcontrols, this.__options);
-                        scope.add(object);
+                // For Mobile Nerf input object 
+                scope.isMBNobject = true; 
+                for (let i = 0, il = json["obj_num"]; i < il; i++) {
+                    let tex0 = new THREE.TextureLoader().load(
+                        "chair_phone/shape" + i.toFixed(0) + ".png" + "feat0.png",
+                        () => {
+                            scope.render();
+                        }
+                    );
+                    tex0.magFilter = THREE.NearestFilter;
+                    tex0.minFilter = THREE.NearestFilter;
+                    let tex1 = new THREE.TextureLoader().load(
+                        "chair_phone/shape" + i.toFixed(0) + ".png" + "feat1.png",
+                        () => {
+                            scope.render();
+                        }
+                    );
+                    tex1.magFilter = THREE.NearestFilter;
+                    tex1.minFilter = THREE.NearestFilter;
+                    let newmat = new THREE.RawShaderMaterial({
+                        side: THREE.DoubleSide,
+                        vertexShader: document
+                        .querySelector("#gbuffer-vert")
+                        .textContent.trim(),
+                        fragmentShader: document
+                        .querySelector("#gbuffer-frag")
+                        .textContent.trim(),
+                        uniforms: {
+                        tDiffuse0: { value: tex0 },
+                        tDiffuse1: { value: tex1 },
+                        },
+                        glslVersion: THREE.GLSL3,
                     });
+                    // newmat.colorWrite = false; 
+                    new OBJLoader().load(
+                        "chair_phone/shape" + i.toFixed(0) + ".obj",
+                        object => {
+                            // Problem 
+                            object.traverse(function (child) {
+                                if (child.type == "Mesh") {
+                                    child.material = newmat;
+                                    child.material
+                                }
+                            });
+
+                            // mannually set mbn object position 
+                            object.scale.set(50, 50, 50); 
+                            object.position.x = 100;
+                            object.position.y = 50;
+                            object.position.z = 150;
+                            // let mbnRoomItem = new Physical3DItem(object, this.dragcontrols, this.__options);
+                            scope.objects.push(object); 
+                            scope.add(object);
+                        }
+                    );
                 }
+                console.log(scope.isMBNobject); 
                 let network_weights = json;
                 let fragmentShaderSource =
                 createViewDependenceFunctions(network_weights);
@@ -440,10 +440,6 @@ export class Viewer3D extends Scene {
                 let weightsTexTwo = createNetworkWeightTexture(
                 network_weights["2_weights"]
                 );
-                
-                // for (const key in fragmentShaderSource) {
-                //     document.write(`<p><strong>${key}:</strong> ${fragmentShaderSource[key]}</p>`);
-                // }
 
                 // PostProcessing setup
                 scope.postScene = new THREE.Scene();
@@ -473,7 +469,12 @@ export class Viewer3D extends Scene {
                         })
                     )
                 );
-            this.mbn_render(cubeRenderTarget, scope);    
+
+                var animate = function () {
+                    requestAnimationFrame(animate);
+                    scope.render(); 
+                };
+                // animate();   
             });
             
         // mbn
@@ -941,7 +942,7 @@ export class Viewer3D extends Scene {
     }
 
     // mbn
-    mbn_render(renderTarget, scope) {
+    mbn_render(scope) {
         // render scene into target
         // Problem 
         // for (const key in renderTarget) {
@@ -949,9 +950,11 @@ export class Viewer3D extends Scene {
         // }
         scope.renderer.setRenderTarget(null);
         scope.renderer.render(scope, scope.camera);
-        scope.renderer.render(scope.postScene, this.postCamera); 
+        scope.renderer.setRenderTarget(null);
+        scope.renderer.render(scope.postScene, scope.postCamera); 
     }
     // mbn
+
 
     addRoomsAndWalls() {
         let scope = this;
@@ -1036,9 +1039,20 @@ export class Viewer3D extends Scene {
         if (!scope.needsUpdate) {
             return;
         }
-        scope.renderer.render(scope, scope.camera);
+        // scope.renderer.render(scope, scope.camera);
         scope.lastRender = Date.now();
-        this.needsUpdate = false      
+        this.needsUpdate = false;       
+        // mbn
+        if (scope.isMBNobject == true) {
+            scope.renderer.setRenderTarget(null);
+            scope.renderer.render(scope, scope.camera);
+            scope.renderer.setRenderTarget(null);
+            // scope.renderer.render(scope.postScene, scope.postCamera); 
+        }
+        else {
+            scope.renderer.render(scope, scope.camera);
+        }
+        // mbn 
     }
 
     pauseTheRendering(flag) {
