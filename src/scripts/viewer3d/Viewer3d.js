@@ -101,6 +101,9 @@ export class Viewer3D extends Scene {
         scope.camera = new PerspectiveCamera(45, window.innerWidth / window.innerHeight, scope.cameraNear, scope.cameraFar);
 
         let cubeRenderTarget = new WebGLCubeRenderTarget(16, { format: RGBFormat, generateMipmaps: true, minFilter: LinearMipmapLinearFilter });
+        // mbn 
+        // scope.renderTargt = cubeRenderTarget
+        // mbn 
         scope.__environmentCamera = new CubeCamera(1, 100000, cubeRenderTarget);
         scope.__environmentCamera.renderTarget.texture.encoding = sRGBEncoding;
 
@@ -404,6 +407,8 @@ export class Viewer3D extends Scene {
                         },
                         glslVersion: THREE.GLSL3,
                     });
+                    console.log(newmat.vertexShader); 
+                    console.log(newmat.fragmentShader); 
                     // newmat.colorWrite = false; 
                     new OBJLoader().load(
                         "chair_phone/shape" + i.toFixed(0) + ".obj",
@@ -418,7 +423,7 @@ export class Viewer3D extends Scene {
 
                             // mannually set mbn object position 
                             object.scale.set(50, 50, 50); 
-                            object.position.x = 100;
+                            object.position.x = 1000;
                             object.position.y = 50;
                             object.position.z = 150;
                             // let mbnRoomItem = new Physical3DItem(object, this.dragcontrols, this.__options);
@@ -458,9 +463,9 @@ export class Viewer3D extends Scene {
                             // tDiffuse0x: { value: renderTarget.texture[0] },
                             // tDiffuse1x: { value: renderTarget.texture[1] },
                             // tDiffuse2x: { value: renderTarget.texture[2] },
-                            tDiffuse0x: { value: cubeRenderTarget.texture[0] },
-                            tDiffuse1x: { value: cubeRenderTarget.texture[1] },
-                            tDiffuse2x: { value: cubeRenderTarget.texture[2] },
+                            tDiffuse0x: { value: scope.renderTarget.texture[0] },
+                            tDiffuse1x: { value: scope.renderTarget.texture[1] },
+                            tDiffuse2x: { value: scope.renderTarget.texture[2] },
                             weightsZero: { value: weightsTexZero },
                             weightsOne: { value: weightsTexOne },
                             weightsTwo: { value: weightsTexTwo },
@@ -941,21 +946,6 @@ export class Viewer3D extends Scene {
         }
     }
 
-    // mbn
-    mbn_render(scope) {
-        // render scene into target
-        // Problem 
-        // for (const key in renderTarget) {
-        //     console.log(`<p><strong>${key}:</strong> ${renderTarget[key]}</p>`);
-        // }
-        scope.renderer.setRenderTarget(null);
-        scope.renderer.render(scope, scope.camera);
-        scope.renderer.setRenderTarget(null);
-        scope.renderer.render(scope.postScene, scope.postCamera); 
-    }
-    // mbn
-
-
     addRoomsAndWalls() {
         let scope = this;
         let i = 0;
@@ -1002,7 +992,10 @@ export class Viewer3D extends Scene {
     }
 
     getARenderer() {
-        let renderer = new WebGLRenderer({ antialias: true, alpha: true });
+        // mbn 
+        let renderer = new WebGLRenderer({ antialias: true, alpha: true, powerPreference: "high-performance",
+        precision: "highp" });
+        // mbn 
         renderer.autoClear = true; //true
         renderer.shadowMap.enabled = true;
         // renderer.shadowMapAutoUpdate = true;
@@ -1044,10 +1037,11 @@ export class Viewer3D extends Scene {
         this.needsUpdate = false;       
         // mbn
         if (scope.isMBNobject == true) {
-            scope.renderer.setRenderTarget(null);
+            scope.renderer.setRenderTarget(scope.renderTarget);
+            console.log("yesss"); 
             scope.renderer.render(scope, scope.camera);
             scope.renderer.setRenderTarget(null);
-            // scope.renderer.render(scope.postScene, scope.postCamera); 
+            scope.renderer.render(scope.postScene, scope.postCamera); 
         }
         else {
             scope.renderer.render(scope, scope.camera);
