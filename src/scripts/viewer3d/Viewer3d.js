@@ -444,7 +444,7 @@ export class Viewer3D extends Scene {
                 // PostProcessing setup
                 scope.postScene = new THREE.Scene();
                 scope.postScene.background = new THREE.Color("rgb(255, 255, 255)");
-                //postScene.background = new THREE.Color("rgb(128, 128, 128)");
+                scope.postScene.background = new THREE.Color("rgb(128, 128, 128)");
                 scope.postCamera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
                 scope.postScene.add(
                     new THREE.Mesh(
