@@ -17,6 +17,9 @@ import { Configuration, viewBounds,shadowVisible } from '../core/configuration.j
 import {ConfigurationHelper} from '../helpers/ConfigurationHelper';
 import { CSS2DRenderer } from 'three/examples/jsm/renderers/CSS2DRenderer.js';
 import { Vector3 } from 'three';
+import {EffectComposer} from 'three/examples/jsm/postprocessing/EffectComposer';
+import {RenderPass} from 'three/examples/jsm/postprocessing/RenderPass';
+import {ShaderPass} from 'three/examples/jsm/postprocessing/ShaderPass';
 
 // mbn 
 import * as THREE from 'three'; 
@@ -379,17 +382,17 @@ export class Viewer3D extends Scene {
                 for (let i = 0, il = json["obj_num"]; i < il; i++) {
                     let tex0 = new THREE.TextureLoader().load(
                         "chair_phone/shape" + i.toFixed(0) + ".png" + "feat0.png",
-                        () => {
-                            scope.render();
-                        }
+                        // () => {
+                        //     scope.render();
+                        // }
                     );
                     tex0.magFilter = THREE.NearestFilter;
                     tex0.minFilter = THREE.NearestFilter;
                     let tex1 = new THREE.TextureLoader().load(
                         "chair_phone/shape" + i.toFixed(0) + ".png" + "feat1.png",
-                        () => {
-                            scope.render();
-                        }
+                        // () => {
+                        //     scope.render();
+                        // }
                     );
                     tex1.magFilter = THREE.NearestFilter;
                     tex1.minFilter = THREE.NearestFilter;
@@ -473,13 +476,7 @@ export class Viewer3D extends Scene {
                         glslVersion: THREE.GLSL3,
                         })
                     )
-                );
-
-                var animate = function () {
-                    requestAnimationFrame(animate);
-                    scope.render(); 
-                };
-                // animate();   
+                ); 
             });
             
         // mbn
@@ -501,8 +498,17 @@ export class Viewer3D extends Scene {
 
         // scope.controls.enabled = false;//To test the drag controls        
         //SEt the animation loop
-        scope.renderer.setAnimationLoop(scope.render.bind(this));
-        scope.render();
+
+        // mbn
+        const composer = new EffectComposer( scope.renderer )
+        var animate = function () {
+            requestAnimationFrame(animate);
+            scope.render(); 
+        };
+        animate();   
+        // mbn
+        // scope.renderer.setAnimationLoop(scope.render.bind(this)); 
+        // scope.render();
     }
 
     __focusOnWallOrRoom(normal, center, distance, y=0){
@@ -1036,16 +1042,10 @@ export class Viewer3D extends Scene {
         scope.lastRender = Date.now();
         this.needsUpdate = false;       
         // mbn
-        if (scope.isMBNobject == true) {
-            scope.renderer.setRenderTarget(scope.renderTarget);
-            console.log("yesss"); 
-            scope.renderer.render(scope, scope.camera);
-            scope.renderer.setRenderTarget(null);
-            scope.renderer.render(scope.postScene, scope.postCamera); 
-        }
-        else {
-            scope.renderer.render(scope, scope.camera);
-        }
+        scope.renderer.setRenderTarget(scope.renderTarget);
+        scope.renderer.render(scope, scope.camera);
+        scope.renderer.setRenderTarget(null);
+        scope.renderer.render(scope.postScene, scope.postCamera); 
         // mbn 
     }
 
