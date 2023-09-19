@@ -102,8 +102,11 @@ export class Viewer3D extends Scene {
         scope.scene = new Scene();
         this.name = 'Scene';
         scope.camera = new PerspectiveCamera(45, window.innerWidth / window.innerHeight, scope.cameraNear, scope.cameraFar);
+        scope.objectScene = new THREE.Scene(); 
 
         let cubeRenderTarget = new WebGLCubeRenderTarget(16, { format: RGBFormat, generateMipmaps: true, minFilter: LinearMipmapLinearFilter });
+        scope.scopeRenderTarget = new THREE.WebGLRenderTarget(window.innerWidth, window.innerHeight);
+
         // mbn 
         // scope.renderTargt = cubeRenderTarget
         // mbn 
@@ -340,8 +343,8 @@ export class Viewer3D extends Scene {
         }
 
         // container = document.getElementById("container");
-        const preset_size_w = 100;
-        const preset_size_h = 100;
+        const preset_size_w = 2000;
+        const preset_size_h = 2000;
         // container.appendChild(renderer.domElement);
         let renderer, renderTarget; 
         // renderer = new THREE.WebGLRenderer({
@@ -411,7 +414,6 @@ export class Viewer3D extends Scene {
                         glslVersion: THREE.GLSL3,
                     });
                     console.log(newmat.vertexShader); 
-                    console.log(newmat.fragmentShader); 
                     // newmat.colorWrite = false; 
                     new OBJLoader().load(
                         "chair_phone/shape" + i.toFixed(0) + ".obj",
@@ -430,8 +432,8 @@ export class Viewer3D extends Scene {
                             object.position.y = 50;
                             object.position.z = 150;
                             // let mbnRoomItem = new Physical3DItem(object, this.dragcontrols, this.__options);
-                            scope.objects.push(object); 
                             scope.add(object);
+                            // scope.objectScene.add(object); 
                         }
                     );
                 }
@@ -450,6 +452,33 @@ export class Viewer3D extends Scene {
                 );
 
                 // PostProcessing setup
+
+                // Qianjun 
+                scope.composer = new EffectComposer(scope.renderer);
+
+                // First pass: render the original scene
+                scope.renderPass = new RenderPass(scope, scope.camera);
+                scope.composer.addPass(scope.renderPass);
+
+                // Second pass: your custom shader
+                scope.shaderPass = new ShaderPass(new THREE.ShaderMaterial({
+                    vertexShader: document.querySelector("#render-vert").textContent.trim(),
+                    fragmentShader: fragmentShaderSource,
+                    uniforms: {
+                        // tDiffuse0x: { value: renderTarget.texture[0] },
+                        // tDiffuse1x: { value: renderTarget.texture[1] },
+                        // tDiffuse2x: { value: renderTarget.texture[2] },
+                        tDiffuse0x: { value: scope.renderTarget.texture[0] },
+                        tDiffuse1x: { value: scope.renderTarget.texture[1] },
+                        tDiffuse2x: { value: scope.renderTarget.texture[2] },
+                        weightsZero: { value: weightsTexZero },
+                        weightsOne: { value: weightsTexOne },
+                        weightsTwo: { value: weightsTexTwo },
+                    },
+                }));
+                scope.composer.addPass(scope.shaderPass);
+
+// Qianjun
                 scope.postScene = new THREE.Scene();
                 scope.postScene.background = new THREE.Color("rgb(255, 255, 255)");
                 scope.postScene.background = new THREE.Color("rgb(128, 128, 128)");
@@ -1039,13 +1068,18 @@ export class Viewer3D extends Scene {
             return;
         }
         // scope.renderer.render(scope, scope.camera);
+        // 新思路：创建mbn_animate()
         scope.lastRender = Date.now();
         this.needsUpdate = false;       
-        // mbn
+    
         scope.renderer.setRenderTarget(scope.renderTarget);
+        // scope.renderer.render(scope.objectScene, scope.camera);
         scope.renderer.render(scope, scope.camera);
         scope.renderer.setRenderTarget(null);
-        scope.renderer.render(scope.postScene, scope.postCamera); 
+        scope.renderer.render(scope, scope.camera);
+        // scope.composer.render()
+        scope.renderer.setRenderTarget(null);
+        scope.renderer.render(scope.postScene, scope.postCamera);  
         // mbn 
     }
 
