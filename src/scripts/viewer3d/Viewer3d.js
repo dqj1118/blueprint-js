@@ -102,13 +102,13 @@ export class Viewer3D extends Scene {
         scope.scene = new Scene();
         this.name = 'Scene';
         scope.camera = new PerspectiveCamera(45, window.innerWidth / window.innerHeight, scope.cameraNear, scope.cameraFar);
-        scope.objectScene = new THREE.Scene(); 
 
         let cubeRenderTarget = new WebGLCubeRenderTarget(16, { format: RGBFormat, generateMipmaps: true, minFilter: LinearMipmapLinearFilter });
         scope.scopeRenderTarget = new THREE.WebGLRenderTarget(window.innerWidth, window.innerHeight);
 
         // mbn 
         // scope.renderTargt = cubeRenderTarget
+        scope.objectScene = new THREE.Scene(); 
         // mbn 
         scope.__environmentCamera = new CubeCamera(1, 100000, cubeRenderTarget);
         scope.__environmentCamera.renderTarget.texture.encoding = sRGBEncoding;
@@ -413,7 +413,7 @@ export class Viewer3D extends Scene {
                         },
                         glslVersion: THREE.GLSL3,
                     });
-                    console.log(newmat.vertexShader); 
+                    // newmat.depthTest = true;
                     // newmat.colorWrite = false; 
                     new OBJLoader().load(
                         "chair_phone/shape" + i.toFixed(0) + ".obj",
@@ -422,7 +422,6 @@ export class Viewer3D extends Scene {
                             object.traverse(function (child) {
                                 if (child.type == "Mesh") {
                                     child.material = newmat;
-                                    child.material
                                 }
                             });
 
@@ -431,13 +430,14 @@ export class Viewer3D extends Scene {
                             object.position.x = 1000;
                             object.position.y = 50;
                             object.position.z = 150;
-                            // let mbnRoomItem = new Physical3DItem(object, this.dragcontrols, this.__options);
-                            scope.add(object);
                             // scope.objectScene.add(object); 
+                            scope.add(object);
+                            console.log(object); 
+
                         }
                     );
+
                 }
-                console.log(scope.isMBNobject); 
                 let network_weights = json;
                 let fragmentShaderSource =
                 createViewDependenceFunctions(network_weights);
@@ -461,8 +461,28 @@ export class Viewer3D extends Scene {
                 scope.composer.addPass(scope.renderPass);
 
                 // Second pass: your custom shader
-                scope.shaderPass = new ShaderPass(new THREE.ShaderMaterial({
-                    vertexShader: document.querySelector("#render-vert").textContent.trim(),
+                // scope.shaderPass = new ShaderPass(new THREE.ShaderMaterial({
+                //     vertexShader: document.querySelector("#render-vert").textContent.trim(),
+                //     fragmentShader: fragmentShaderSource,
+                //     uniforms: {
+                //         // tDiffuse0x: { value: renderTarget.texture[0] },
+                //         // tDiffuse1x: { value: renderTarget.texture[1] },
+                //         // tDiffuse2x: { value: renderTarget.texture[2] },
+                //         tDiffuse0x: { value: scope.renderTarget.texture[0] },
+                //         tDiffuse1x: { value: scope.renderTarget.texture[1] },
+                //         tDiffuse2x: { value: scope.renderTarget.texture[2] },
+                //         weightsZero: { value: weightsTexZero },
+                //         weightsOne: { value: weightsTexOne },
+                //         weightsTwo: { value: weightsTexTwo },
+                //     },
+                // }));
+                // scope.composer.addPass(scope.shaderPass);
+
+                scope.quadGeometry = new THREE.BoxGeometry( 1, 1, 1 );
+                scope.quadMaterial = new THREE.RawShaderMaterial({
+                    vertexShader: document
+                        .querySelector("#render-vert")
+                        .textContent.trim(),
                     fragmentShader: fragmentShaderSource,
                     uniforms: {
                         // tDiffuse0x: { value: renderTarget.texture[0] },
@@ -475,10 +495,23 @@ export class Viewer3D extends Scene {
                         weightsOne: { value: weightsTexOne },
                         weightsTwo: { value: weightsTexTwo },
                     },
-                }));
-                scope.composer.addPass(scope.shaderPass);
+                    glslVersion: THREE.GLSL3,
+                    }
+                ); 
+                
+                scope.quad = new THREE.Mesh(scope.quadGeometry, scope.quadMaterial);
+                scope.quad.position.set(1000, 50, 150);
+                scope.quad.scale.set(800, 800, 800); 
 
-// Qianjun
+
+                const offset = new THREE.Vector3(-1000, -700, -800);
+                console.log(scope.camera.position); 
+                // scope.quad.position.add(offset); // This is a predefined offset that you can set based on your needs.
+                // scope.quad.lookAt(scope.camera.position);
+                scope.quad.lookAt(1000, 50, 150);
+                scope.add(scope.quad); 
+
+                
                 scope.postScene = new THREE.Scene();
                 scope.postScene.background = new THREE.Color("rgb(255, 255, 255)");
                 scope.postScene.background = new THREE.Color("rgb(128, 128, 128)");
@@ -503,6 +536,7 @@ export class Viewer3D extends Scene {
                             weightsTwo: { value: weightsTexTwo },
                         },
                         glslVersion: THREE.GLSL3,
+                        depthTest: true,
                         })
                     )
                 ); 
@@ -1071,16 +1105,22 @@ export class Viewer3D extends Scene {
         // 新思路：创建mbn_animate()
         scope.lastRender = Date.now();
         this.needsUpdate = false;       
-    
+        // scope.quad.visible = false; 
+
+        scope.quad.lookAt(scope.camera.position); 
+        
+        // scope.camera.lookAt(scope.quad.position); 
         scope.renderer.setRenderTarget(scope.renderTarget);
         // scope.renderer.render(scope.objectScene, scope.camera);
         scope.renderer.render(scope, scope.camera);
+        // scope.quad.visible = true; 
         scope.renderer.setRenderTarget(null);
         scope.renderer.render(scope, scope.camera);
-        // scope.composer.render()
-        scope.renderer.setRenderTarget(null);
-        scope.renderer.render(scope.postScene, scope.postCamera);  
+        // scope.renderer.render(scope.postScene, scope.postCamera);  
         // mbn 
+
+        
+         
     }
 
     pauseTheRendering(flag) {
