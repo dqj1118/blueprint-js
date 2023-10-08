@@ -99,7 +99,7 @@ export class Viewer3D extends Scene {
 
     init() {
         let scope = this;
-        scope.scene = new Scene();
+        // scope.scene = new Scene();
         this.name = 'Scene';
         scope.camera = new PerspectiveCamera(45, window.innerWidth / window.innerHeight, scope.cameraNear, scope.cameraFar);
 
@@ -345,7 +345,6 @@ export class Viewer3D extends Scene {
         'Number of pixels, to make the chair more detailed.'
         const preset_size_w = 2000;
         const preset_size_h = 2000;
-        console.log(scope); 
         // container.appendChild(renderer.domElement);
 
         scope.renderTarget = new THREE.WebGLMultipleRenderTargets(
@@ -415,7 +414,6 @@ export class Viewer3D extends Scene {
                             object.traverse(function (child) {
                                 if (child.type == "Mesh") {
                                     child.material = newmat;
-                                    child.material.transparent = true; 
                                     // child.visible = true; 
                                 }
                             });
@@ -425,7 +423,6 @@ export class Viewer3D extends Scene {
                             object.position.x = 1000;
                             object.position.y = 50;
                             object.position.z = 150;
-                            // scope.objectScene.add(object); 
                             scope.add(object);
 
                         }
@@ -433,7 +430,6 @@ export class Viewer3D extends Scene {
 
                 }
 
-                console.log(scope);
                 let network_weights = json;
                 let fragmentShaderSource =
                 createViewDependenceFunctions(network_weights);
@@ -468,13 +464,8 @@ export class Viewer3D extends Scene {
                 ); 
                 
                 scope.quad = new THREE.Mesh(scope.quadGeometry, scope.quadMaterial);
-                scope.quad.position.set(1000, 50, 150);
-                scope.quad.scale.set(800, 800, 800); 
 
-                scope.postCamera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
-                
-                console.log(scope.children[71]); 
-                // scope.quad.setFromObject(scope.children]);
+                scope.postCamera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);                
 
                 scope.add(scope.quad); 
 
@@ -527,7 +518,6 @@ export class Viewer3D extends Scene {
         //SEt the animation loop
 
         // mbn
-        const composer = new EffectComposer( scope.renderer )
         var animate = function () {
             requestAnimationFrame(animate);
             scope.render(); 
@@ -727,28 +717,55 @@ export class Viewer3D extends Scene {
         if (!scope.needsUpdate) {
             return;
         }
-        // scope.renderer.render(scope, scope.camera);
         // 新思路：创建mbn_animate()
         scope.lastRender = Date.now();
         this.needsUpdate = false;       
-        // scope.quad.visible = false; 
 
-        scope.quad.lookAt(scope.camera.position); 
+        // scope.quad.lookAt(scope.camera.position); 
         
         'quad is rendered here using renderTarget'
-        scope.camera.lookAt(scope.quad.position);
-        scope.renderer.setRenderTarget(scope.renderTarget);
-        scope.renderer.render(scope, scope.camera);
-        // scope.quad.visible = true; 
+        // scope.camera.lookAt(scope.quad.position);
 
-        scope.renderer.setRenderTarget(null);
+        // scope.quad.visible = false; 
+        scope.renderer.setRenderTarget(scope.renderTarget);
+        scope.renderer.clear(); 
         scope.renderer.render(scope, scope.camera);
+
+        // scope.quad.visible = true;
+        'quad appears here'
+        scope.renderer.setRenderTarget(null);
+        scope.renderer.render(scope.quad, scope.postCamera);
+        scope.renderer.autoClear = false;
+        scope.renderer.render(scope, scope.camera);
+        scope.renderer.autoClear = true;
         // scope.renderer.render(scope.postScene, scope.postCamera);  
         // mbn 
 
         
          
     }
+
+    // mbn 
+    addPostProcess() {
+        if (this.isRenderTarget) {
+          this.composer = new EffectComposer(this.renderer, this.renderTarget);
+          this.composer.renderToScreen = false;
+          const renderPass = new RenderPass(this.postScene, this.postCamera);
+          this.composer.addPass(renderPass);
+    
+          const effect = new ShaderPass(this.quadMaterial);
+          this.composer.addPass(effect);
+        } else {
+
+          this.composer = new EffectComposer(this.renderer);
+          const renderPass = new RenderPass(this.scene, this.camera);
+          this.composer.addPass(renderPass);
+    
+          const effect = new ShaderPass(this.quadMaterial);
+          this.composer.addPass(effect);
+        }
+    }
+    // mbn
 
     pauseTheRendering(flag) {
         this.needsUpdate = flag;
