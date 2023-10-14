@@ -423,6 +423,23 @@ export class Viewer3D extends Scene {
                             object.position.x = 1000;
                             object.position.y = 50;
                             object.position.z = 150;
+
+                            document.addEventListener('keydown', function(event) {
+                                switch(event.keyCode) {
+                                    case 37: // Left arrow
+                                        object.position.x -= 10;
+                                        break;
+                                    case 39: // Right arrow
+                                        object.position.x += 10;
+                                        break;
+                                    case 38: // Up arrow
+                                        object.position.z -= 10;
+                                        break;
+                                    case 40: // Down arrow
+                                        object.position.z += 10;
+                                        break;
+                                }
+                            });
                             scope.add(object);
 
                         }
@@ -730,14 +747,16 @@ export class Viewer3D extends Scene {
         scope.renderer.setRenderTarget(scope.renderTarget);
         scope.renderer.clear(); 
         scope.renderer.render(scope, scope.camera);
+        scope.renderer.autoClear = false;
 
         // scope.quad.visible = true;
         'quad appears here'
         scope.renderer.setRenderTarget(null);
-        scope.renderer.render(scope.quad, scope.postCamera);
-        scope.renderer.autoClear = false;
+        scope.renderer.render(scope.postScene, scope.postCamera);
+        // scope.renderer.autoClear = false;
         scope.renderer.render(scope, scope.camera);
-        scope.renderer.autoClear = true;
+        scope.renderer.autoClearDepth = true; 
+        // scope.renderer.autoClear = true;
         // scope.renderer.render(scope.postScene, scope.postCamera);  
         // mbn 
 
