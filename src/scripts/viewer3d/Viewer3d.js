@@ -107,7 +107,6 @@ export class Viewer3D extends Scene {
 
         // mbn 
         // scope.renderTargt = cubeRenderTarget
-        scope.objectScene = new THREE.Scene(); 
         // mbn 
         scope.__environmentCamera = new CubeCamera(1, 100000, cubeRenderTarget);
         scope.__environmentCamera.renderTarget.texture.encoding = sRGBEncoding;
@@ -343,8 +342,8 @@ export class Viewer3D extends Scene {
 
         // container = document.getElementById("container");
         'Number of pixels, to make the chair more detailed.'
-        const preset_size_w = 2000;
-        const preset_size_h = 2000;
+        const preset_size_w = 400;
+        const preset_size_h = 400;
         // container.appendChild(renderer.domElement);
 
         scope.renderTarget = new THREE.WebGLMultipleRenderTargets(
@@ -734,9 +733,10 @@ export class Viewer3D extends Scene {
         if (!scope.needsUpdate) {
             return;
         }
-        // 新思路：创建mbn_animate()
         scope.lastRender = Date.now();
         this.needsUpdate = false;       
+
+        // mbn
 
         // scope.quad.lookAt(scope.camera.position); 
         
@@ -744,47 +744,28 @@ export class Viewer3D extends Scene {
         // scope.camera.lookAt(scope.quad.position);
 
         // scope.quad.visible = false; 
-        scope.renderer.setRenderTarget(scope.renderTarget);
-        scope.renderer.clear(); 
-        scope.renderer.render(scope, scope.camera);
-        scope.renderer.autoClear = false;
+        // scope.renderer.setRenderTarget(scope.renderTarget);
+        // scope.renderer.clear(); 
+        // scope.renderer.render(scope, scope.camera);
+        // scope.renderer.autoClear = false;
 
         // scope.quad.visible = true;
         'quad appears here'
         scope.renderer.setRenderTarget(null);
         scope.renderer.render(scope.postScene, scope.postCamera);
-        // scope.renderer.autoClear = false;
         scope.renderer.render(scope, scope.camera);
-        scope.renderer.autoClearDepth = true; 
-        // scope.renderer.autoClear = true;
+
+
+        scope.renderer.setRenderTarget(scope.renderTarget);
+        scope.renderer.clear(); 
+        scope.renderer.render(scope, scope.camera);
+        scope.renderer.autoClear = false;
         // scope.renderer.render(scope.postScene, scope.postCamera);  
         // mbn 
 
         
          
     }
-
-    // mbn 
-    addPostProcess() {
-        if (this.isRenderTarget) {
-          this.composer = new EffectComposer(this.renderer, this.renderTarget);
-          this.composer.renderToScreen = false;
-          const renderPass = new RenderPass(this.postScene, this.postCamera);
-          this.composer.addPass(renderPass);
-    
-          const effect = new ShaderPass(this.quadMaterial);
-          this.composer.addPass(effect);
-        } else {
-
-          this.composer = new EffectComposer(this.renderer);
-          const renderPass = new RenderPass(this.scene, this.camera);
-          this.composer.addPass(renderPass);
-    
-          const effect = new ShaderPass(this.quadMaterial);
-          this.composer.addPass(effect);
-        }
-    }
-    // mbn
 
     pauseTheRendering(flag) {
         this.needsUpdate = flag;
