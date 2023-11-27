@@ -17,13 +17,11 @@ import { Configuration, viewBounds,shadowVisible } from '../core/configuration.j
 import {ConfigurationHelper} from '../helpers/ConfigurationHelper';
 import { CSS2DRenderer } from 'three/examples/jsm/renderers/CSS2DRenderer.js';
 import { Vector3 } from 'three';
-import {EffectComposer} from 'three/examples/jsm/postprocessing/EffectComposer';
-import {RenderPass} from 'three/examples/jsm/postprocessing/RenderPass';
-import {ShaderPass} from 'three/examples/jsm/postprocessing/ShaderPass';
 
 // mbn 
 import * as THREE from 'three'; 
 import {OBJLoader} from "../OBJLoader.js";
+import { DragControls } from 'three/examples/jsm/controls/DragControls.js';
 // mbn 
 
 
@@ -342,6 +340,7 @@ export class Viewer3D extends Scene {
                             object.traverse(function (child) {
                                 if (child.type == "Mesh") {
                                     child.material = newmat;
+                                    child.castShadow = true;
                                     // child.visible = true; 
                                 }
                             });
@@ -349,34 +348,36 @@ export class Viewer3D extends Scene {
                             // mannually set mbn object position 
                             object.scale.set(50, 50, 50); 
                             object.position.x = 1000;
-                            object.position.y = 50;
+                            object.position.y = 53;
                             object.position.z = 150;
 
-                            document.addEventListener('keydown', function(event) {
-                                switch(event.keyCode) {
-                                    case 37: // Left arrow
-                                        object.position.x -= 10;
-                                        break;
-                                    case 39: // Right arrow
-                                        object.position.x += 10;
-                                        break;
-                                    case 38: // Up arrow
-                                        object.position.z -= 10;
-                                        break;
-                                    case 40: // Down arrow
-                                        object.position.z += 10;
-                                        break;
-                                }
+                            // Initialize DragControls with an array of objects
+                            let dragControls = new DragControls([object], scope.camera, scope.renderer.domElement);
+
+                            // Add event listeners for drag events
+                            dragControls.addEventListener('dragstart', function (event) {
+                                scope.controls.enabled = false; // Disable orbit controls while dragging
+                                event.object.material.opacity = 0.5; // Reduce opacity when dragging
+                                console.log(event.object.position.y); 
                             });
+
+                            dragControls.addEventListener('drag', function (event) {
+                                event.object.position.y = 0; 
+                                // Handle the drag event if needed
+                            });
+
+                            dragControls.addEventListener('dragend', function (event) {
+                                scope.controls.enabled = true; // Re-enable orbit controls after dragging
+                                event.object.material.opacity = 1.0; // Reset opacity when not dragging
+                            });
+                            // object = new Physical3DItem(object, this.dragcontrols, this.__options); 
                             scope.add(object);
+                            console.log(object); 
 
                         }
                     );
 
                 }
-
-                // PostProcessing setup
-
 
             });
             
@@ -406,9 +407,6 @@ export class Viewer3D extends Scene {
             scope.render(); 
         };
         animate();   
-        // mbn
-        // scope.renderer.setAnimationLoop(scope.render.bind(this)); 
-        // scope.render();
     }
 
     __focusOnWallOrRoom(normal, center, distance, y=0){
@@ -506,8 +504,9 @@ export class Viewer3D extends Scene {
         }
         this.__physicalRoomItems.length = 0; //A cool way to clear an array in javascript
         
-        let roomItems = this.model.roomItems;
+        let roomItems = this.model.roomItems; 
         for (i = 0; i < roomItems.length; i++) {
+            console.log(roomItems[i]);
             let physicalRoomItem = new Physical3DItem(roomItems[i], this.dragcontrols, this.__options);
             this.add(physicalRoomItem);
             this.__physicalRoomItems.push(physicalRoomItem);
